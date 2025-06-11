@@ -5,6 +5,9 @@ import './styles/index.css';
 import { rssService } from './services/rssService';
 import { storageService } from './services/storageService';
 
+// Drill data for testing
+import { initializeDrillData } from './data/drillData';
+
 // Components
 import Header from './components/common/Header';
 import Dashboard from './components/dashboard/Dashboard';
@@ -52,24 +55,43 @@ const App = () => {
       setIsLoading(true);
       console.log('🚀 Initializing Ghost Brief application...');
       
-      // Load stored data
-      const storedFeeds = storageService.getRSSFeeds();
-      const storedArticles = storageService.getArticles();
-      const storedBriefs = storageService.getBriefs();
-      const storedSettings = storageService.getSettings();
+      // Load stored data (now async with IndexedDB)
+      const storedFeeds = await storageService.getRSSFeeds();
+      const storedArticles = await storageService.getArticles();
+      const storedBriefs = await storageService.getBriefs();
+      const storedSettings = await storageService.getSettings();
+      
+      // Initialize drill data for testing if no articles exist
+      if (storedArticles.length === 0) {
+        console.log('🎯 No articles found, initializing drill data...');
+        await initializeDrillData(storageService);
+        
+        // Reload articles after drill data initialization
+        const updatedArticles = await storageService.getArticles();
+        const updatedBriefs = await storageService.getBriefs();
+        setArticles(updatedArticles);
+        setBriefs(updatedBriefs);
+        console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
+      } else {
+        setArticles(storedArticles);
+        setBriefs(storedBriefs);
+      }
       
       console.log(`📡 Loaded ${storedFeeds.length} RSS feeds from storage`);
-      console.log(`📰 Loaded ${storedArticles.length} articles from storage`);
-      console.log(`🧠 Loaded ${storedBriefs.length} briefs from storage`);
+      console.log(`📰 Total articles available: ${await storageService.getArticles().then(a => a.length)}`);
+      console.log(`🧠 Total briefs available: ${await storageService.getBriefs().then(b => b.length)}`);
       
       setRssFeeds(storedFeeds);
-      setArticles(storedArticles);
-      setBriefs(storedBriefs);
+      // Articles and briefs already set above based on drill data initialization
+      if (storedArticles.length > 0) {
+        setArticles(storedArticles);
+        setBriefs(storedBriefs);
+      }
       setSettings(storedSettings);
-      setLastUpdate(storageService.getLastUpdate());
+      setLastUpdate(await storageService.getLastUpdate());
       
       // Clean up old data
-      storageService.cleanupOldData();
+      await storageService.cleanupOldData();
       
       // Always fetch fresh RSS content on startup to ensure we have signals
       console.log('🔄 Starting RSS feed processing...');
@@ -209,9 +231,9 @@ const App = () => {
    */
   const handleAddFeed = async (feedConfig) => {
     try {
-      const success = storageService.addRSSFeed(feedConfig);
+      const success = await storageService.addRSSFeed(feedConfig);
       if (success) {
-        setRssFeeds(storageService.getRSSFeeds());
+        setRssFeeds(await storageService.getRSSFeeds());
         
         // Immediately test the new feed
         setProcessingStatus({ stage: 'testing', message: `Testing new feed: ${feedConfig.name}...` });

@@ -10,7 +10,8 @@
       "Bash(npm run lint)",
       "Bash(timeout 5 npm run:*)",
       "Bash(ls:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "WebFetch(domain:ghostbriefyellow.vercel.app)"
     ],
     "deny": []
   }

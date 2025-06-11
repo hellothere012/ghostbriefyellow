@@ -1,8 +1,12 @@
-// Local Storage Service for Ghost Brief
-// Handles persistence of RSS feeds, articles, and user settings
+// Enhanced Storage Service for Ghost Brief
+// Handles persistence using IndexedDB with localStorage fallback
+// Maintains identical interface for seamless migration
+
+import { indexedDBService } from './indexedDBService';
+import { migrationService } from './migrationService';
 
 /**
- * Storage Service for managing local data persistence
+ * Enhanced Storage Service with IndexedDB and automatic migration
  */
 export class StorageService {
   constructor() {
@@ -14,17 +18,72 @@ export class StorageService {
       LAST_UPDATE: 'ghost_brief_last_update'
     };
     
-    this.initializeDefaultFeeds();
+    this.useIndexedDB = true;
+    this.migrationStarted = false;
+    
+    this.initializeStorage();
+  }
+
+  /**
+   * Initialize storage system with migration
+   */
+  async initializeStorage() {
+    try {
+      // Run migration if needed
+      if (!this.migrationStarted) {
+        this.migrationStarted = true;
+        console.log('🔄 Initializing enhanced storage system...');
+        
+        const migrationSuccess = await migrationService.runMigration();
+        if (migrationSuccess) {
+          console.log('✅ Storage system ready with IndexedDB');
+        } else {
+          console.warn('⚠️ Migration had issues, using fallback mode');
+          this.useIndexedDB = false;
+        }
+      }
+      
+      // Initialize default feeds if none exist
+      await this.initializeDefaultFeeds();
+      
+    } catch (error) {
+      console.error('❌ Storage initialization failed, falling back to localStorage:', error);
+      this.useIndexedDB = false;
+    }
+  }
+
+  /**
+   * Check if IndexedDB is available and working
+   */
+  async checkIndexedDBAvailable() {
+    try {
+      if (!window.indexedDB) {
+        return false;
+      }
+      
+      // Try to initialize IndexedDB service
+      await indexedDBService.ensureDB();
+      return true;
+    } catch (error) {
+      console.warn('IndexedDB not available:', error);
+      return false;
+    }
   }
 
   /**
    * Initialize with default premium RSS feeds if none exist
    */
-  initializeDefaultFeeds() {
-    const existingFeeds = this.getRSSFeeds();
-    if (existingFeeds.length === 0) {
-      const defaultFeeds = this.getDefaultRSSFeeds();
-      this.saveRSSFeeds(defaultFeeds);
+  async initializeDefaultFeeds() {
+    try {
+      const existingFeeds = await this.getRSSFeeds();
+      if (existingFeeds.length === 0) {
+        console.log('📡 Initializing default RSS feeds...');
+        const defaultFeeds = this.getDefaultRSSFeeds();
+        await this.saveRSSFeeds(defaultFeeds);
+        console.log(`✅ Initialized ${defaultFeeds.length} default RSS feeds`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to initialize default feeds:', error);
     }
   }
 
@@ -242,58 +301,105 @@ export class StorageService {
   }
 
   /**
-   * RSS Feed Management
+   * RSS Feed Management - Enhanced with IndexedDB
    */
   
-  getRSSFeeds() {
+  async getRSSFeeds() {
     try {
-      const feeds = localStorage.getItem(this.STORAGE_KEYS.RSS_FEEDS);
-      return feeds ? JSON.parse(feeds) : [];
+      if (this.useIndexedDB) {
+        return await indexedDBService.getRSSFeeds();
+      } else {
+        // Fallback to localStorage
+        const feeds = localStorage.getItem(this.STORAGE_KEYS.RSS_FEEDS);
+        return feeds ? JSON.parse(feeds) : [];
+      }
     } catch (error) {
       console.error('Error loading RSS feeds:', error);
-      return [];
+      // Try localStorage fallback
+      try {
+        const feeds = localStorage.getItem(this.STORAGE_KEYS.RSS_FEEDS);
+        return feeds ? JSON.parse(feeds) : [];
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        return [];
+      }
     }
   }
 
-  saveRSSFeeds(feeds) {
+  async saveRSSFeeds(feeds) {
     try {
-      localStorage.setItem(this.STORAGE_KEYS.RSS_FEEDS, JSON.stringify(feeds));
-      return true;
+      if (this.useIndexedDB) {
+        return await indexedDBService.saveRSSFeeds(feeds);
+      } else {
+        // Fallback to localStorage
+        localStorage.setItem(this.STORAGE_KEYS.RSS_FEEDS, JSON.stringify(feeds));
+        return true;
+      }
     } catch (error) {
       console.error('Error saving RSS feeds:', error);
       return false;
     }
   }
 
-  addRSSFeed(feedConfig) {
-    const feeds = this.getRSSFeeds();
-    const newFeed = {
-      id: this.generateFeedId(feedConfig.url),
-      ...feedConfig,
-      addedAt: new Date().toISOString(),
-      lastFetched: null,
-      status: 'active',
-      errorCount: 0
-    };
-    
-    feeds.push(newFeed);
-    return this.saveRSSFeeds(feeds);
+  async addRSSFeed(feedConfig) {
+    try {
+      const newFeed = {
+        id: this.generateFeedId(feedConfig.url),
+        ...feedConfig,
+        addedAt: new Date().toISOString(),
+        lastFetched: null,
+        status: 'active',
+        errorCount: 0
+      };
+      
+      if (this.useIndexedDB) {
+        return await indexedDBService.addRSSFeed(newFeed);
+      } else {
+        // Fallback to localStorage
+        const feeds = await this.getRSSFeeds();
+        feeds.push(newFeed);
+        return await this.saveRSSFeeds(feeds);
+      }
+    } catch (error) {
+      console.error('Error adding RSS feed:', error);
+      return false;
+    }
   }
 
-  updateRSSFeed(feedId, updates) {
-    const feeds = this.getRSSFeeds();
-    const feedIndex = feeds.findIndex(feed => feed.id === feedId);
-    
-    if (feedIndex === -1) return false;
-    
-    feeds[feedIndex] = { ...feeds[feedIndex], ...updates };
-    return this.saveRSSFeeds(feeds);
+  async updateRSSFeed(feedId, updates) {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.updateRSSFeed(feedId, updates);
+      } else {
+        // Fallback to localStorage
+        const feeds = await this.getRSSFeeds();
+        const feedIndex = feeds.findIndex(feed => feed.id === feedId);
+        
+        if (feedIndex === -1) return false;
+        
+        feeds[feedIndex] = { ...feeds[feedIndex], ...updates };
+        return await this.saveRSSFeeds(feeds);
+      }
+    } catch (error) {
+      console.error('Error updating RSS feed:', error);
+      return false;
+    }
   }
 
-  deleteRSSFeed(feedId) {
-    const feeds = this.getRSSFeeds();
-    const filteredFeeds = feeds.filter(feed => feed.id !== feedId);
-    return this.saveRSSFeeds(filteredFeeds);
+  async deleteRSSFeed(feedId) {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.deleteRSSFeed(feedId);
+      } else {
+        // Fallback to localStorage
+        const feeds = await this.getRSSFeeds();
+        const filteredFeeds = feeds.filter(feed => feed.id !== feedId);
+        return await this.saveRSSFeeds(filteredFeeds);
+      }
+    } catch (error) {
+      console.error('Error deleting RSS feed:', error);
+      return false;
+    }
   }
 
   updateFeedStatus(feedId, status, errorCount = 0) {
@@ -305,104 +411,167 @@ export class StorageService {
   }
 
   /**
-   * Article Management
+   * Article Management - Enhanced with IndexedDB
    */
   
-  getArticles() {
+  async getArticles() {
     try {
-      const articles = localStorage.getItem(this.STORAGE_KEYS.ARTICLES);
-      return articles ? JSON.parse(articles) : [];
+      if (this.useIndexedDB) {
+        return await indexedDBService.getArticles();
+      } else {
+        // Fallback to localStorage
+        const articles = localStorage.getItem(this.STORAGE_KEYS.ARTICLES);
+        return articles ? JSON.parse(articles) : [];
+      }
     } catch (error) {
       console.error('Error loading articles:', error);
-      return [];
+      // Try localStorage fallback
+      try {
+        const articles = localStorage.getItem(this.STORAGE_KEYS.ARTICLES);
+        return articles ? JSON.parse(articles) : [];
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        return [];
+      }
     }
   }
 
-  saveArticles(articles) {
+  async saveArticles(articles) {
     try {
-      // Remove articles older than 30 days
-      const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-      const recentArticles = articles.filter(article => {
-        const articleDate = new Date(article.publishedAt || article.fetchedAt).getTime();
-        return articleDate > thirtyDaysAgo;
-      });
+      if (this.useIndexedDB) {
+        return await indexedDBService.saveArticles(articles);
+      } else {
+        // Fallback to localStorage
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        const recentArticles = articles.filter(article => {
+          const articleDate = new Date(article.publishedAt || article.fetchedAt).getTime();
+          return articleDate > thirtyDaysAgo;
+        });
 
-      localStorage.setItem(this.STORAGE_KEYS.ARTICLES, JSON.stringify(recentArticles));
-      this.updateLastUpdate();
-      return true;
+        localStorage.setItem(this.STORAGE_KEYS.ARTICLES, JSON.stringify(recentArticles));
+        await this.updateLastUpdate();
+        return true;
+      }
     } catch (error) {
       console.error('Error saving articles:', error);
       return false;
     }
   }
 
-  addArticles(newArticles) {
-    const existingArticles = this.getArticles();
-    const combined = [...existingArticles, ...newArticles];
-    
-    // Remove duplicates based on URL
-    const unique = combined.filter((article, index, self) => 
-      index === self.findIndex(a => a.url === article.url)
-    );
-
-    return this.saveArticles(unique);
-  }
-
-  /**
-   * Briefs Management (Permanent Storage)
-   */
-  
-  getBriefs() {
+  async addArticles(newArticles) {
     try {
-      const briefs = localStorage.getItem(this.STORAGE_KEYS.BRIEFS);
-      return briefs ? JSON.parse(briefs) : [];
+      if (this.useIndexedDB) {
+        return await indexedDBService.addArticles(newArticles);
+      } else {
+        // Fallback to localStorage
+        const existingArticles = await this.getArticles();
+        const combined = [...existingArticles, ...newArticles];
+        
+        // Remove duplicates based on URL
+        const unique = combined.filter((article, index, self) => 
+          index === self.findIndex(a => a.url === article.url)
+        );
+
+        return await this.saveArticles(unique);
+      }
     } catch (error) {
-      console.error('Error loading briefs:', error);
-      return [];
+      console.error('Error adding articles:', error);
+      return false;
     }
   }
 
-  saveBriefs(briefs) {
+  /**
+   * Briefs Management - Enhanced with IndexedDB
+   */
+  
+  async getBriefs() {
     try {
-      localStorage.setItem(this.STORAGE_KEYS.BRIEFS, JSON.stringify(briefs));
-      return true;
+      if (this.useIndexedDB) {
+        return await indexedDBService.getBriefs();
+      } else {
+        // Fallback to localStorage
+        const briefs = localStorage.getItem(this.STORAGE_KEYS.BRIEFS);
+        return briefs ? JSON.parse(briefs) : [];
+      }
+    } catch (error) {
+      console.error('Error loading briefs:', error);
+      // Try localStorage fallback
+      try {
+        const briefs = localStorage.getItem(this.STORAGE_KEYS.BRIEFS);
+        return briefs ? JSON.parse(briefs) : [];
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError);
+        return [];
+      }
+    }
+  }
+
+  async saveBriefs(briefs) {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.saveBriefs(briefs);
+      } else {
+        // Fallback to localStorage
+        localStorage.setItem(this.STORAGE_KEYS.BRIEFS, JSON.stringify(briefs));
+        return true;
+      }
     } catch (error) {
       console.error('Error saving briefs:', error);
       return false;
     }
   }
 
-  addBrief(brief) {
-    const briefs = this.getBriefs();
-    const newBrief = {
-      id: this.generateBriefId(),
-      ...brief,
-      createdAt: new Date().toISOString(),
-      isPermanent: true
-    };
-    
-    briefs.unshift(newBrief); // Add to beginning
-    return this.saveBriefs(briefs);
+  async addBrief(brief) {
+    try {
+      const newBrief = {
+        id: this.generateBriefId(),
+        ...brief,
+        createdAt: new Date().toISOString(),
+        isPermanent: true
+      };
+      
+      if (this.useIndexedDB) {
+        return await indexedDBService.addBrief(newBrief);
+      } else {
+        // Fallback to localStorage
+        const briefs = await this.getBriefs();
+        briefs.unshift(newBrief); // Add to beginning
+        return await this.saveBriefs(briefs);
+      }
+    } catch (error) {
+      console.error('Error adding brief:', error);
+      return false;
+    }
   }
 
   /**
-   * Settings Management
+   * Settings Management - Enhanced with IndexedDB
    */
   
-  getSettings() {
+  async getSettings() {
     try {
-      const settings = localStorage.getItem(this.STORAGE_KEYS.SETTINGS);
-      return settings ? JSON.parse(settings) : this.getDefaultSettings();
+      if (this.useIndexedDB) {
+        return await indexedDBService.getSettings();
+      } else {
+        // Fallback to localStorage
+        const settings = localStorage.getItem(this.STORAGE_KEYS.SETTINGS);
+        return settings ? JSON.parse(settings) : this.getDefaultSettings();
+      }
     } catch (error) {
       console.error('Error loading settings:', error);
       return this.getDefaultSettings();
     }
   }
 
-  saveSettings(settings) {
+  async saveSettings(settings) {
     try {
-      localStorage.setItem(this.STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-      return true;
+      if (this.useIndexedDB) {
+        return await indexedDBService.saveSettings(settings);
+      } else {
+        // Fallback to localStorage
+        localStorage.setItem(this.STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
+        return true;
+      }
     } catch (error) {
       console.error('Error saving settings:', error);
       return false;
@@ -434,30 +603,105 @@ export class StorageService {
     return `brief_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  updateLastUpdate() {
-    localStorage.setItem(this.STORAGE_KEYS.LAST_UPDATE, new Date().toISOString());
+  async updateLastUpdate() {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.updateLastUpdate();
+      } else {
+        // Fallback to localStorage
+        const timestamp = new Date().toISOString();
+        localStorage.setItem(this.STORAGE_KEYS.LAST_UPDATE, timestamp);
+        return timestamp;
+      }
+    } catch (error) {
+      console.error('Error updating last update:', error);
+      return null;
+    }
   }
 
-  getLastUpdate() {
-    return localStorage.getItem(this.STORAGE_KEYS.LAST_UPDATE);
+  async getLastUpdate() {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.getLastUpdate();
+      } else {
+        // Fallback to localStorage
+        return localStorage.getItem(this.STORAGE_KEYS.LAST_UPDATE);
+      }
+    } catch (error) {
+      console.error('Error getting last update:', error);
+      return null;
+    }
   }
 
   /**
-   * Data cleanup and maintenance
+   * Data cleanup and maintenance - Enhanced with IndexedDB
    */
   
-  cleanupOldData() {
-    const articles = this.getArticles();
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
-    const recentArticles = articles.filter(article => {
-      const articleDate = new Date(article.publishedAt || article.fetchedAt).getTime();
-      return articleDate > thirtyDaysAgo;
-    });
+  async cleanupOldData() {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.cleanupOldData();
+      } else {
+        // Fallback to localStorage
+        const articles = await this.getArticles();
+        const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
+        
+        const recentArticles = articles.filter(article => {
+          const articleDate = new Date(article.publishedAt || article.fetchedAt).getTime();
+          return articleDate > thirtyDaysAgo;
+        });
 
-    if (recentArticles.length !== articles.length) {
-      this.saveArticles(recentArticles);
-      console.log(`Cleaned up ${articles.length - recentArticles.length} old articles`);
+        if (recentArticles.length !== articles.length) {
+          await this.saveArticles(recentArticles);
+          console.log(`Cleaned up ${articles.length - recentArticles.length} old articles`);
+        }
+        return true;
+      }
+    } catch (error) {
+      console.error('Error during cleanup:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Enhanced storage statistics
+   */
+  async getStorageStats() {
+    try {
+      if (this.useIndexedDB) {
+        return await indexedDBService.getStorageStats();
+      } else {
+        // Fallback to localStorage stats
+        const articles = await this.getArticles();
+        const briefs = await this.getBriefs();
+        const feeds = await this.getRSSFeeds();
+        
+        const articlesSize = JSON.stringify(articles).length;
+        const briefsSize = JSON.stringify(briefs).length;
+        const feedsSize = JSON.stringify(feeds).length;
+        
+        return {
+          articles: articles.length,
+          briefs: briefs.length,
+          feeds: feeds.length,
+          totalSize: articlesSize + briefsSize + feedsSize,
+          storageType: 'localStorage',
+          capacity: '~10MB',
+          lastUpdate: await this.getLastUpdate()
+        };
+      }
+    } catch (error) {
+      console.error('Error getting storage stats:', error);
+      return {
+        articles: 0,
+        briefs: 0,
+        feeds: 0,
+        totalSize: 0,
+        storageType: 'Unknown',
+        capacity: 'Unknown',
+        lastUpdate: null,
+        error: error.message
+      };
     }
   }
 
