@@ -1,5 +1,5 @@
 import React from 'react';
-import { FaGlobe, FaMicroscope, FaRadio, FaClipboard, FaExternalLinkAlt, FaRobot } from 'react-icons/fa';
+import { FaGlobe, FaMicroscope, FaBroadcastTower, FaClipboard, FaExternalLinkAlt, FaRobot } from 'react-icons/fa';
 
 const SignalCard = ({ signal, onPromoteToBrief }) => {
   const getScoreClass = (score) => {
@@ -112,7 +112,7 @@ const SignalCard = ({ signal, onPromoteToBrief }) => {
           {/* Source Information */}
           {signal.source && (
             <span className="tag text-xs px-2 py-1 rounded-full bg-gray-500/20 text-gray-400 border border-gray-500 flex items-center gap-1">
-              <FaRadio /> {signal.source.feedName}
+              <FaBroadcastTower /> {signal.source.feedName}
             </span>
           )}
           

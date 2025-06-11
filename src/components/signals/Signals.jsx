@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { FaRadio, FaSearch, FaTrash } from 'react-icons/fa';
+import { FaBroadcastTower, FaSearch, FaTrash } from 'react-icons/fa';
 import SignalCard from './SignalCard.jsx';
 
 const Signals = ({ signals, onPromoteToBrief, settings, onUpdateSettings }) => {
@@ -80,7 +80,7 @@ const Signals = ({ signals, onPromoteToBrief, settings, onUpdateSettings }) => {
       {/* Page Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-100 flex items-center space-x-3">
-          <FaRadio />
+          <FaBroadcastTower />
           <span>SIGNAL DROPS</span>
         </h1>
         <p className="text-gray-400 mt-2">
@@ -239,7 +239,7 @@ const Signals = ({ signals, onPromoteToBrief, settings, onUpdateSettings }) => {
         ) : (
           <div className="signal-card text-center p-8 rounded-lg">
             <div className="text-4xl mb-4">
-              {hasActiveFilters ? <FaSearch /> : <FaRadio />}
+              {hasActiveFilters ? <FaSearch /> : <FaBroadcastTower />}
             </div>
             <h3 className="text-lg font-semibold text-gray-300 mb-2">
               {hasActiveFilters ? 'No Matching Signals' : 'No Signals Available'}
