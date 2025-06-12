@@ -20,7 +20,7 @@ Ghost Brief is a professional-grade AI-powered intelligence briefing dashboard t
 - **Frontend**: React 18 with functional components and hooks
 - **Styling**: Custom CSS with CSS variables, green/black intelligence theme
 - **State Management**: React hooks (useState, useEffect, useMemo, useCallback)
-- **Data Persistence**: localStorage with automatic cleanup and retention policies
+- **Data Persistence**: IndexedDB with automatic cleanup and retention policies
 - **RSS Processing**: Custom RSS service with CORS proxy integration
 - **AI Analysis**: Client-side intelligence analysis engine with entity recognition
 
@@ -34,10 +34,23 @@ Ghost Brief is a professional-grade AI-powered intelligence briefing dashboard t
 - Supports concurrent feed processing with error handling
 
 #### Storage Service (`src/services/storageService.js`)
-- Manages local data persistence for feeds, articles, and briefs
+- Manages IndexedDB data persistence for feeds, articles, and briefs
 - Implements 30-day automatic retention policy for articles
 - Provides feed health monitoring and statistics
 - Handles data import/export and backup functionality
+- Automatic migration from localStorage to IndexedDB
+
+#### IndexedDB Service (`src/services/indexedDBService.js`)
+- High-capacity storage infrastructure (GB capacity vs ~10MB localStorage)
+- Structured database with optimized indexes for performance
+- Transaction-based operations prevent data corruption
+- Schema versioning and upgrade management
+
+#### Migration Service (`src/services/migrationService.js`)
+- Automatic migration from localStorage to IndexedDB
+- Data integrity validation during migration
+- Preserves all existing user data during upgrade
+- Fallback mechanisms for migration failures
 
 #### Intelligence Analyzer (`src/utils/intelligenceAnalyzer.js`)
 - AI-powered content analysis and relevance scoring
@@ -71,10 +84,47 @@ src/
 │       ├── AddFeedModal.jsx - New feed addition
 │       └── FeedHealthMonitor.jsx - Feed status monitoring
 ├── services/ - Core business logic and data processing
+│   ├── briefing/ - Daily briefing generation modules
+│   ├── quality/ - Signal quality filtering modules
+│   ├── scoring/ - Multi-factor scoring modules
+│   └── storage/ - IndexedDB storage management modules
 ├── utils/ - Intelligence analysis and processing utilities
 ├── styles/ - CSS theming and styling
+├── constants/ - Centralized configuration constants
+├── config/ - API and environment configuration
 └── data/ - Default RSS feeds and configuration
 ```
+
+### Modular Service Architecture
+
+The application uses a highly modular architecture for maintainability and extensibility:
+
+#### Briefing Services (`src/services/briefing/`)
+- `briefingGenerator.js` - Main briefing generation orchestrator
+- `patternAnalyzer.js` - Pattern and trend analysis
+- `sectionGenerators.js` - Individual section generators
+- `qualityAssessor.js` - Briefing quality validation
+- `templateManager.js` - Briefing template management
+
+#### Quality Services (`src/services/quality/`)
+- `contentAnalyzer.js` - Content quality and relevance analysis
+- `sourceVerifier.js` - Source credibility verification
+- `duplicateDetector.js` - Advanced duplicate detection
+
+#### Scoring Services (`src/services/scoring/`)
+- `keywordScorer.js` - Keyword-based relevance scoring
+- `entityScorer.js` - Entity significance scoring
+- `temporalScorer.js` - Time-based relevance scoring
+- `sourceAssessor.js` - Source credibility assessment
+- `threatAssessor.js` - Threat level assessment
+- `scoreCombiner.js` - Multi-factor score combination
+
+#### Storage Services (`src/services/storage/`)
+- `articleManager.js` - Article CRUD operations
+- `briefManager.js` - Brief management
+- `feedManager.js` - RSS feed configuration
+- `settingsManager.js` - Application settings
+- `retentionManager.js` - Data retention and cleanup
 
 ### Data Models
 
@@ -156,6 +206,48 @@ The application includes 15 pre-configured premium intelligence sources:
 5. **Category Classification**: Automatic categorization into intelligence domains
 6. **Priority Assignment**: CRITICAL/HIGH/MEDIUM/LOW based on intelligence value
 
+### Enhanced Intelligence Analysis Services
+
+#### Claude Analysis Service (`src/services/claudeAnalysisService.js`)
+- Professional intelligence analysis prompts
+- Enhanced validation and error handling
+- Context-aware analysis with geopolitical focus
+- Multi-domain specialized prompts (threat, technology, economic)
+- Comprehensive fallback systems
+
+#### Multi-Factor Scoring Service (`src/services/multiFactorScoringService.js`)
+- Sophisticated 6-factor scoring algorithm
+- Enhanced keyword tier system with context weighting
+- Entity significance analysis with geopolitical relationships
+- Temporal relevance and source credibility assessment
+- Cross-validation and consistency checking
+
+#### Advanced Entity Extraction (`src/services/advancedEntityExtraction.js`)
+- Comprehensive entity databases with aliases (500+ entities)
+- Technical designation extraction (weapon systems, coordinates)
+- Relationship pattern detection (adversarial, allied)
+- Strategic location recognition and assessment
+- Quantitative data extraction (casualties, monetary, distances)
+
+#### Signal Quality Filter (`src/services/signalQualityFilter.js`)
+- 7-stage comprehensive quality pipeline
+- Content quality assessment with linguistic indicators
+- Source verification and credibility analysis
+- Advanced duplicate detection with similarity analysis
+- Quality metrics and reporting with pass/fail tracking
+
+#### Daily Briefing Service (`src/services/dailyBriefingService.js`)
+- Automated daily intelligence briefing generation
+- Professional intelligence community format
+- 7-section comprehensive briefings (Executive Summary, Priority Developments, Threat Assessment, etc.)
+- Quality assessment and briefing history management
+
+#### Briefing Scheduler (`src/services/briefingScheduler.js`)
+- Automatic scheduling with manual trigger capability
+- Daily briefing generation at 6 AM
+- Integration with application lifecycle
+- Error handling and retry mechanisms
+
 ### Intelligence Keywords Database
 - **CRITICAL**: nuclear, weapon, attack, cyber, breach, classified, military, bioweapon
 - **HIGH**: sanctions, deployment, missile, surveillance, intelligence, espionage
@@ -166,13 +258,23 @@ The application includes 15 pre-configured premium intelligence sources:
 
 ## Data Flow
 
-### RSS Processing Flow
+### Enhanced RSS Processing Flow
 1. **Feed Fetching**: Automated polling every 15-30 minutes
 2. **Content Parsing**: XML parsing and article extraction
-3. **AI Analysis**: Intelligence scoring and entity extraction
-4. **Filtering**: Advertisement removal and duplicate detection
-5. **Storage**: Article persistence with 30-day retention
-6. **Display**: Real-time updates to dashboard and signals
+3. **Enhanced AI Analysis**: Claude API integration with professional prompts
+4. **Multi-Factor Scoring**: 6-factor intelligence scoring algorithm
+5. **Advanced Entity Extraction**: Professional entity recognition (500+ entities)
+6. **Quality Filtering**: 7-stage filtering pipeline
+7. **Storage**: IndexedDB persistence with 30-day retention
+8. **Display**: Real-time updates to dashboard and signals
+
+### Daily Briefing Generation Flow
+1. **Signal Collection**: Gather signals from past 24 hours
+2. **Pattern Analysis**: Identify trends and strategic developments
+3. **Section Generation**: Create 7-section professional briefing
+4. **Quality Validation**: Ensure intelligence community standards
+5. **Storage**: Permanent briefing storage with metadata
+6. **Scheduling**: Automated daily generation at 6 AM
 
 ### Data Retention Policy
 - **Articles**: 30-day automatic cleanup for dashboard/signals
@@ -189,8 +291,14 @@ npm start
 # Start with production backend
 npm run start:prod
 
+# Start backend server only
+npm run server
+
 # Run both frontend and backend in development
 npm run dev
+
+# Run frontend with production API
+npm run dev:prod
 
 # Build for production
 npm run build
@@ -201,8 +309,17 @@ npm run build:prod
 # Run tests (Jest with React Testing Library)
 npm test
 
+# Run a single test file
+npm test -- path/to/test.js
+
+# Run tests in watch mode
+npm test -- --watch
+
 # Lint code (ESLint for .js/.jsx files)
 npm run lint
+
+# Auto-fix linting issues
+npm run lint -- --fix
 
 # Format code (Prettier)
 npm run format
@@ -289,10 +406,12 @@ npm run build:prod
 4. Test responsive design across different screen sizes
 
 ### Performance Optimization
-1. Monitor localStorage usage and implement cleanup
+1. Monitor IndexedDB usage and implement cleanup
 2. Optimize RSS processing batch sizes
 3. Implement virtual scrolling for large datasets
 4. Add caching layers for frequently accessed data
+5. Leverage IndexedDB indexes for fast queries
+6. Use transaction-based operations for data integrity
 
 ## Security Considerations
 
@@ -307,18 +426,43 @@ npm run build:prod
 ### Common Issues
 1. **CORS Errors**: RSS feeds blocked by browser security policies
 2. **Feed Parsing Failures**: Malformed XML or unexpected RSS format
-3. **Storage Limits**: localStorage quota exceeded (automatic cleanup implemented)
+3. **Storage Limits**: IndexedDB quota management (automatic cleanup implemented)
 4. **Performance Issues**: Too many concurrent RSS requests (batching implemented)
+
+## Project Initialization & Quick Start
+
+### First Time Setup
+1. **Install Dependencies**: `npm install`
+2. **Environment Configuration**: Create `.env` file with required variables
+3. **Start Development**: 
+   - Frontend only: `npm start`
+   - Frontend + Backend: `npm run dev` (requires concurrently)
+4. **Verify Functionality**: Check dashboard loads with drill data
+
+### Key Verification Points
+- Application starts without errors
+- IndexedDB initialization succeeds
+- Drill data appears in dashboard
+- RSS processing functions correctly
+- Daily briefing generation works
+- Briefing scheduler initializes at startup (check console for "📅 Initializing briefing scheduler...")
+- Quality filtering pipeline operates
+
+### Data Structure
+- **IndexedDB Stores**: articles, briefs, feeds, settings, metadata
+- **Professional Drill Data**: Available in `src/data/drillData.js`
+- **Automatic Migration**: From localStorage to IndexedDB on first run
 
 ## Important Notes
 
 - RSS processing uses CORS proxy at `https://api.allorigins.win/raw?url=` for feed fetching
 - Intelligence analysis pipeline uses Claude API via configured backend endpoint
-- All data persists in localStorage with automatic 30-day cleanup for articles
+- All data persists in IndexedDB with automatic 30-day cleanup for articles and permanent brief storage
 - Feed health monitoring tracks error counts and last fetch timestamps
 - Advertisement detection uses URL patterns and promotional language analysis
 - API configuration automatically switches between development and production environments
 - Backend deployment available at: https://ghost-brief-api-199177265279.us-central1.run.app
+- Professional drill data initializes automatically when no content exists
 
 ## API Integration
 

@@ -1,12 +1,18 @@
 // Enhanced Storage Service for Ghost Brief
 // Handles persistence using IndexedDB with localStorage fallback
-// Maintains identical interface for seamless migration
+// NOTE: This service has been modularized - individual modules are in src/services/storage/
 
 import { indexedDBService } from './indexedDBService';
 import { migrationService } from './migrationService';
 
+// Import modular storage services
+import { feedManagerService } from './storage/feedManager.js';
+
 /**
  * Enhanced Storage Service with IndexedDB and automatic migration
+ * 
+ * COMPATIBILITY LAYER: This service maintains the original API while using
+ * modular components for improved maintainability and testability.
  */
 export class StorageService {
   constructor() {
@@ -71,17 +77,11 @@ export class StorageService {
   }
 
   /**
-   * Initialize with default premium RSS feeds if none exist
+   * Initialize with default premium RSS feeds if none exist (using modular service)
    */
   async initializeDefaultFeeds() {
     try {
-      const existingFeeds = await this.getRSSFeeds();
-      if (existingFeeds.length === 0) {
-        console.log('📡 Initializing default RSS feeds...');
-        const defaultFeeds = this.getDefaultRSSFeeds();
-        await this.saveRSSFeeds(defaultFeeds);
-        console.log(`✅ Initialized ${defaultFeeds.length} default RSS feeds`);
-      }
+      return await feedManagerService.initializeDefaultFeeds();
     } catch (error) {
       console.error('❌ Failed to initialize default feeds:', error);
     }
@@ -730,40 +730,6 @@ export class StorageService {
     }
   }
 
-  /**
-   * Storage statistics
-   */
-  
-  getStorageStats() {
-    const feeds = this.getRSSFeeds();
-    const articles = this.getArticles();
-    const briefs = this.getBriefs();
-    
-    return {
-      totalFeeds: feeds.length,
-      activeFeeds: feeds.filter(f => f.isActive).length,
-      totalArticles: articles.length,
-      totalBriefs: briefs.length,
-      lastUpdate: this.getLastUpdate(),
-      storageUsed: this.calculateStorageUsage()
-    };
-  }
-
-  calculateStorageUsage() {
-    let total = 0;
-    Object.values(this.STORAGE_KEYS).forEach(key => {
-      const item = localStorage.getItem(key);
-      if (item) {
-        total += new Blob([item]).size;
-      }
-    });
-    
-    return {
-      bytes: total,
-      kb: Math.round(total / 1024),
-      mb: Math.round(total / (1024 * 1024))
-    };
-  }
 }
 
 // Export singleton instance

@@ -34,7 +34,7 @@ const App = () => {
   // Initialize data on component mount
   useEffect(() => {
     initializeApplication();
-  }, []);
+  }, [initializeApplication]);
 
   // Auto-refresh RSS feeds
   useEffect(() => {
@@ -45,86 +45,7 @@ const App = () => {
 
       return () => clearInterval(interval);
     }
-  }, [settings.autoRefreshInterval]);
-
-  /**
-   * Initialize application with stored data and fetch fresh RSS content
-   */
-  const initializeApplication = async () => {
-    try {
-      setIsLoading(true);
-      console.log('🚀 Initializing Ghost Brief application...');
-      
-      // Load stored data (now async with IndexedDB)
-      const storedFeeds = await storageService.getRSSFeeds();
-      const storedArticles = await storageService.getArticles();
-      const storedBriefs = await storageService.getBriefs();
-      const storedSettings = await storageService.getSettings();
-      
-      // Initialize drill data for testing if no articles exist
-      if (storedArticles.length === 0) {
-        console.log('🎯 No articles found, initializing drill data...');
-        await initializeDrillData(storageService);
-        
-        // Reload articles after drill data initialization
-        const updatedArticles = await storageService.getArticles();
-        const updatedBriefs = await storageService.getBriefs();
-        setArticles(updatedArticles);
-        setBriefs(updatedBriefs);
-        console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
-      } else {
-        setArticles(storedArticles);
-        setBriefs(storedBriefs);
-      }
-      
-      console.log(`📡 Loaded ${storedFeeds.length} RSS feeds from storage`);
-      console.log(`📰 Total articles available: ${await storageService.getArticles().then(a => a.length)}`);
-      console.log(`🧠 Total briefs available: ${await storageService.getBriefs().then(b => b.length)}`);
-      
-      setRssFeeds(storedFeeds);
-      // Articles and briefs already set above based on drill data initialization
-      if (storedArticles.length > 0) {
-        setArticles(storedArticles);
-        setBriefs(storedBriefs);
-      }
-      setSettings(storedSettings);
-      setLastUpdate(await storageService.getLastUpdate());
-      
-      // Clean up old data
-      await storageService.cleanupOldData();
-      
-      // Always fetch fresh RSS content on startup to ensure we have signals
-      console.log('🔄 Starting RSS feed processing...');
-      
-      // Use setTimeout to ensure state updates are complete before RSS processing
-      setTimeout(async () => {
-        try {
-          const activeFeeds = storedFeeds.filter(feed => feed.isActive);
-          if (activeFeeds.length > 0) {
-            console.log(`📡 Processing ${activeFeeds.length} active RSS feeds...`);
-            await refreshRSSFeeds();
-          } else {
-            console.warn('⚠️ No active RSS feeds found');
-            setProcessingStatus({ 
-              stage: 'warning', 
-              message: 'No active RSS feeds configured. Go to Feed Management to activate feeds.' 
-            });
-          }
-        } catch (error) {
-          console.error('❌ RSS processing failed during initialization:', error);
-        }
-      }, 100);
-      
-    } catch (error) {
-      console.error('❌ Application initialization failed:', error);
-      setProcessingStatus({ 
-        stage: 'error', 
-        message: `Initialization failed: ${error.message}` 
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
 
   /**
    * Check if we should auto-refresh based on last update time
@@ -224,7 +145,86 @@ const App = () => {
       setIsLoading(false);
       setTimeout(() => setProcessingStatus(null), 8000); // Extended timeout for debugging
     }
-  }, [rssFeeds, articles, settings]);
+  }, [rssFeeds, articles]);
+
+  /**
+   * Initialize application with stored data and fetch fresh RSS content
+   */
+  const initializeApplication = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      console.log('🚀 Initializing Ghost Brief application...');
+      
+      // Load stored data (now async with IndexedDB)
+      const storedFeeds = await storageService.getRSSFeeds();
+      const storedArticles = await storageService.getArticles();
+      const storedBriefs = await storageService.getBriefs();
+      const storedSettings = await storageService.getSettings();
+      
+      // Initialize drill data for testing if no articles exist
+      if (storedArticles.length === 0) {
+        console.log('🎯 No articles found, initializing drill data...');
+        await initializeDrillData(storageService);
+        
+        // Reload articles after drill data initialization
+        const updatedArticles = await storageService.getArticles();
+        const updatedBriefs = await storageService.getBriefs();
+        setArticles(updatedArticles);
+        setBriefs(updatedBriefs);
+        console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
+      } else {
+        setArticles(storedArticles);
+        setBriefs(storedBriefs);
+      }
+      
+      console.log(`📡 Loaded ${storedFeeds.length} RSS feeds from storage`);
+      console.log(`📰 Total articles available: ${await storageService.getArticles().then(a => a.length)}`);
+      console.log(`🧠 Total briefs available: ${await storageService.getBriefs().then(b => b.length)}`);
+      
+      setRssFeeds(storedFeeds);
+      // Articles and briefs already set above based on drill data initialization
+      if (storedArticles.length > 0) {
+        setArticles(storedArticles);
+        setBriefs(storedBriefs);
+      }
+      setSettings(storedSettings);
+      setLastUpdate(await storageService.getLastUpdate());
+      
+      // Clean up old data
+      await storageService.cleanupOldData();
+      
+      // Always fetch fresh RSS content on startup to ensure we have signals
+      console.log('🔄 Starting RSS feed processing...');
+      
+      // Use setTimeout to ensure state updates are complete before RSS processing
+      setTimeout(async () => {
+        try {
+          const activeFeeds = storedFeeds.filter(feed => feed.isActive);
+          if (activeFeeds.length > 0) {
+            console.log(`📡 Processing ${activeFeeds.length} active RSS feeds...`);
+            await refreshRSSFeeds();
+          } else {
+            console.warn('⚠️ No active RSS feeds found');
+            setProcessingStatus({ 
+              stage: 'warning', 
+              message: 'No active RSS feeds configured. Go to Feed Management to activate feeds.' 
+            });
+          }
+        } catch (error) {
+          console.error('❌ RSS processing failed during initialization:', error);
+        }
+      }, 100);
+      
+    } catch (error) {
+      console.error('❌ Application initialization failed:', error);
+      setProcessingStatus({ 
+        stage: 'error', 
+        message: `Initialization failed: ${error.message}` 
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [refreshRSSFeeds]);
 
   /**
    * RSS Feed Management Functions
