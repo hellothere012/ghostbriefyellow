@@ -282,47 +282,112 @@ The application includes 15 pre-configured premium intelligence sources:
 - **Feed Configuration**: Persistent across sessions
 - **Error Logs**: Feed health monitoring and troubleshooting
 
+## Critical React Architecture Patterns
+
+### Function Definition Order (CRITICAL)
+This application has specific function definition requirements that prevent runtime crashes:
+
+```javascript
+const App = () => {
+  // 1. State definitions FIRST
+  const [state, setState] = useState();
+  
+  // 2. ALL useCallback functions BEFORE any useEffect
+  const functionA = useCallback(() => {}, [deps]);
+  const functionB = useCallback(() => {
+    functionA(); // Safe - functionA defined above
+  }, [functionA]);
+  
+  // 3. useEffect hooks AFTER function definitions
+  useEffect(() => {
+    functionB(); // Safe - functionB defined above
+  }, [functionB]);
+};
+```
+
+**Critical Rule**: Never call a function in useEffect before it's defined with useCallback. This causes "use before defined" errors that result in blank pages in production.
+
+### React Hook Dependencies
+- Always include function dependencies in useEffect arrays
+- Use useCallback for functions that are dependencies of other hooks
+- Avoid circular dependencies between useCallback functions
+- Use eslint-disable-next-line react-hooks/exhaustive-deps only when intentionally running once
+
+## Production Deployment
+
+### Vercel Configuration
+The app uses specific Vercel settings in `vercel.json`:
+- **Build Command**: `npm run build:prod` (sets production environment)
+- **Environment Variables**: Automatically injected for production API
+- **SPA Rewrites**: All routes redirect to index.html for client-side routing
+
+### Build Process
+```bash
+# Production build (required for deployment)
+npm run build:prod
+
+# Test production build locally
+npx serve -s build
+
+# Development build (local testing only)
+npm run build
+```
+
+### Environment Detection Hierarchy
+1. `REACT_APP_ENV` environment variable (explicit override)
+2. `NODE_ENV` environment variable  
+3. Hostname detection (localhost = development)
+4. Default to production for deployed environments
+
+## Error Handling & Debugging
+
+### Production Error Handling
+The app includes multiple error handling layers:
+- **ErrorBoundary**: Catches React component errors in production
+- **Storage Fallbacks**: Continues operating if IndexedDB fails
+- **API Retry Logic**: Exponential backoff for failed requests
+- **RSS Processing Fallbacks**: Client-side analysis when API fails
+
+### Debugging Blank Page Issues
+1. Check browser console for "use before defined" errors
+2. Verify function definition order in App.js
+3. Check React Hook dependency arrays
+4. Test production build locally with `npx serve -s build`
+5. Verify environment variables are set correctly
+
+## RSS Processing Architecture
+
+### Sequential Processing Pattern
+The RSS service processes feeds sequentially to prevent API overload:
+- **One feed at a time** with 2-3 second delays between feeds
+- **Article batches of 2** with 2-3 second delays between batches
+- **60-second timeout** per feed to prevent hanging
+- **Retry logic** with exponential backoff for failed requests
+
+### Rate Limiting & Resource Management
+- Maximum 2 concurrent API requests
+- Request queue management prevents system overload
+- Circuit breaker pattern for cascading failure prevention
+- Memory usage monitoring and cleanup
+
 ## Development Commands
 
 ```bash
-# Start development server (uses localhost:3001 backend)
-npm start
+# Development
+npm start                    # Frontend only (localhost:3000)
+npm run dev                  # Frontend + Backend (requires concurrently)
+npm run server              # Backend only (localhost:3001)
 
-# Start with production backend
-npm run start:prod
+# Production Testing
+npm run build:prod          # Build with production environment
+npx serve -s build          # Test production build locally
 
-# Start backend server only
-npm run server
-
-# Run both frontend and backend in development
-npm run dev
-
-# Run frontend with production API
-npm run dev:prod
-
-# Build for production
-npm run build
-
-# Build with production API configuration
-npm run build:prod
-
-# Run tests (Jest with React Testing Library)
-npm test
-
-# Run a single test file
-npm test -- path/to/test.js
-
-# Run tests in watch mode
-npm test -- --watch
-
-# Lint code (ESLint for .js/.jsx files)
-npm run lint
-
-# Auto-fix linting issues
-npm run lint -- --fix
-
-# Format code (Prettier)
-npm run format
+# Testing & Quality
+npm test                    # Run all tests
+npm test -- --watch         # Watch mode
+npm test -- path/to/test.js # Single test file
+npm run lint                # ESLint check
+npm run lint -- --fix       # Auto-fix linting
 ```
 
 ## Environment Configuration
@@ -385,84 +450,103 @@ npm run start:prod
 npm run build:prod
 ```
 
-## Common Development Tasks
+## Critical Debugging Guide
 
-### Adding New RSS Feeds
-1. Use the RSS Management interface to add feeds
-2. Test feed connectivity and parsing
-3. Monitor feed health and adjust credibility scores
-4. Review AI analysis results and adjust keywords if needed
+### Blank Page Issues (Production)
+**Root Cause**: Function definition order or React Hook dependency errors
 
-### Modifying Intelligence Analysis
-1. Edit keyword databases in `src/utils/intelligenceAnalyzer.js`
-2. Adjust scoring weights and thresholds
-3. Update entity recognition patterns
-4. Test with sample RSS content
+**Debugging Steps**:
+1. Check browser console for JavaScript errors
+2. Look for "use before defined" or "Cannot read property" errors
+3. Verify function definition order in App.js:
+   - All useCallback functions before useEffect hooks
+   - Functions defined before they're referenced
+4. Test production build locally: `npm run build:prod && npx serve -s build`
+5. Check React Hook dependency arrays for missing dependencies
 
-### Customizing UI/UX
-1. Modify CSS variables in `src/styles/index.css` for theming
-2. Adjust component layouts in respective component files
-3. Update filtering and search logic in component state management
-4. Test responsive design across different screen sizes
+### RSS Processing Issues
+**Symptoms**: Feeds not loading, API timeouts, blank signals
 
-### Performance Optimization
-1. Monitor IndexedDB usage and implement cleanup
-2. Optimize RSS processing batch sizes
-3. Implement virtual scrolling for large datasets
-4. Add caching layers for frequently accessed data
-5. Leverage IndexedDB indexes for fast queries
-6. Use transaction-based operations for data integrity
+**Debugging Steps**:
+1. Check console for RSS processing errors
+2. Verify API endpoint health: check network tab for failed requests
+3. Test individual feeds in RSS Management interface
+4. Monitor rate limiting: look for "too many requests" errors
+5. Check IndexedDB storage quotas and cleanup
 
-## Security Considerations
+### Storage & Migration Issues
+**Symptoms**: Data loss, initialization failures, performance issues
 
-- RSS feeds are processed through CORS proxy (consider backend implementation for production)
-- No sensitive data stored in localStorage
-- All external links open in new tabs with security attributes
-- Content sanitization for RSS feed data
-- Error handling prevents application crashes from malformed feeds
+**Solutions**:
+- Clear IndexedDB if migration fails: DevTools > Application > Storage
+- Check console for storage initialization errors
+- Verify drill data initialization if no articles exist
+- Monitor storage usage and cleanup operations
 
-## Troubleshooting
+## Performance Optimization
 
-### Common Issues
-1. **CORS Errors**: RSS feeds blocked by browser security policies
-2. **Feed Parsing Failures**: Malformed XML or unexpected RSS format
-3. **Storage Limits**: IndexedDB quota management (automatic cleanup implemented)
-4. **Performance Issues**: Too many concurrent RSS requests (batching implemented)
+### RSS Processing Optimization
+- **Sequential Processing**: Prevents API overload and system freezing
+- **Batch Size**: Keep article batches small (2 articles max)
+- **Delays**: Use 2-3 second delays between operations
+- **Timeouts**: 60-second timeout per feed prevents hanging
 
-## Project Initialization & Quick Start
+### Storage Performance
+- **IndexedDB Batching**: Batch write operations for efficiency
+- **Cleanup Automation**: 30-day retention for articles, permanent for briefs
+- **Index Optimization**: Use structured indexes for fast queries
+- **Transaction Management**: Use transactions for data integrity
+
+## Project Initialization
 
 ### First Time Setup
-1. **Install Dependencies**: `npm install`
-2. **Environment Configuration**: Create `.env` file with required variables
-3. **Start Development**: 
-   - Frontend only: `npm start`
-   - Frontend + Backend: `npm run dev` (requires concurrently)
-4. **Verify Functionality**: Check dashboard loads with drill data
+```bash
+# Install dependencies
+npm install
 
-### Key Verification Points
-- Application starts without errors
-- IndexedDB initialization succeeds
-- Drill data appears in dashboard
-- RSS processing functions correctly
-- Daily briefing generation works
-- Briefing scheduler initializes at startup (check console for "📅 Initializing briefing scheduler...")
-- Quality filtering pipeline operates
+# Start development (choose one)
+npm start                # Frontend only
+npm run dev             # Frontend + Backend
 
-### Data Structure
-- **IndexedDB Stores**: articles, briefs, feeds, settings, metadata
-- **Professional Drill Data**: Available in `src/data/drillData.js`
-- **Automatic Migration**: From localStorage to IndexedDB on first run
+# Verify functionality
+# - Dashboard loads with drill data
+# - RSS feeds can be added/tested
+# - No console errors
+```
 
-## Important Notes
+### Environment Variables
+Create `.env` file for local development:
+```bash
+# Backend API (leave blank for localhost:3001)
+REACT_APP_API_URL=
 
-- RSS processing uses CORS proxy at `https://api.allorigins.win/raw?url=` for feed fetching
-- Intelligence analysis pipeline uses Claude API via configured backend endpoint
-- All data persists in IndexedDB with automatic 30-day cleanup for articles and permanent brief storage
-- Feed health monitoring tracks error counts and last fetch timestamps
-- Advertisement detection uses URL patterns and promotional language analysis
-- API configuration automatically switches between development and production environments
-- Backend deployment available at: https://ghost-brief-api-199177265279.us-central1.run.app
-- Professional drill data initializes automatically when no content exists
+# Environment override (leave blank for auto-detection)
+REACT_APP_ENV=
+
+# Server configuration
+PORT=3001
+NODE_ENV=development
+```
+
+## Important Architecture Notes
+
+### RSS Processing
+- **CORS Proxy**: `https://api.allorigins.win/raw?url=` for feed fetching
+- **Sequential Processing**: One feed at a time to prevent overload
+- **Rate Limiting**: Max 2 concurrent requests with retry logic
+- **Fallback Analysis**: Client-side intelligence when API fails
+
+### Data Persistence
+- **Primary Storage**: IndexedDB with GB capacity
+- **Retention Policy**: 30 days for articles, permanent for briefs
+- **Migration**: Automatic upgrade from localStorage to IndexedDB
+- **Drill Data**: Professional test data auto-initializes when empty
+
+### API Integration
+- **Backend**: https://ghost-brief-api-199177265279.us-central1.run.app
+- **Environment Detection**: Automatic localhost vs production switching
+- **Health Monitoring**: Feed status tracking with error counts
+- **Intelligence Analysis**: Claude API with professional prompts
 
 ## API Integration
 
@@ -486,3 +570,17 @@ Environment is determined by:
 2. `NODE_ENV` environment variable
 3. Hostname detection (localhost = development)
 4. Default to production for deployed environments
+
+## Security & Best Practices
+
+### Error Handling
+- **ErrorBoundary**: Wraps entire app to catch React errors
+- **Storage Fallbacks**: App continues if IndexedDB fails
+- **API Resilience**: Retry logic with exponential backoff
+- **Graceful Degradation**: Client-side fallbacks for all services
+
+### Performance
+- **Function Definition Order**: Critical for preventing runtime errors
+- **Sequential RSS Processing**: Prevents system overload
+- **Memory Management**: Automatic cleanup and retention policies
+- **Rate Limiting**: Prevents API throttling and service degradation
