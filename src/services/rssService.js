@@ -19,11 +19,17 @@ export class RSSService {
     this.errorCount = {};
     this.lastFetched = {};
     
+    // Request queue management
+    this.maxConcurrentRequests = 2;
+    this.activeRequests = 0;
+    this.requestQueue = [];
+    
     // Log configuration on initialization
     if (apiConfig.isDevelopment()) {
       console.log('🔧 RSS Service initialized with API config:', {
         environment: apiConfig.getEnvironment(),
-        apiBaseUrl: apiConfig.get('apiBaseUrl')
+        apiBaseUrl: apiConfig.get('apiBaseUrl'),
+        maxConcurrentRequests: this.maxConcurrentRequests
       });
     }
   }
@@ -266,8 +272,8 @@ export class RSSService {
     console.log(`🤖 Starting enhanced AI analysis for ${articles.length} articles from ${feedConfig.name}`);
     const processedArticles = [];
 
-    // Process articles in batches for better performance
-    const batchSize = 3; // Reduced for more sophisticated analysis
+    // Process articles in smaller batches with rate limiting
+    const batchSize = 2; // Reduced to prevent API overload
     for (let i = 0; i < articles.length; i += batchSize) {
       const batch = articles.slice(i, i + batchSize);
       
@@ -290,22 +296,45 @@ export class RSSService {
             { depth: 'comprehensive', focusAreas: ['intelligence', 'geopolitical', 'threat'] }
           );
 
-          // Call Claude API with enhanced prompt
-          const response = await apiConfig.makeRequest('/api/analyze-article', {
-            method: 'POST',
-            body: JSON.stringify({
-              article: enhancedArticle,
-              existingArticles: existingArticles,
-              enhancedPrompt: analysisRequest.prompt,
-              analysisContext: analysisRequest.context,
-              version: '3.0-professional'
-            })
-          });
-
-          const result = await response.json();
+          // Call Claude API with enhanced prompt and retry logic
+          let result = null;
+          let retryCount = 0;
+          const maxRetries = 3;
           
-          if (!result.success) {
-            throw new Error(result.error || 'Enhanced Claude API analysis failed');
+          while (retryCount < maxRetries) {
+            try {
+              const response = await apiConfig.makeRequest('/api/analyze-article', {
+                method: 'POST',
+                body: JSON.stringify({
+                  article: enhancedArticle,
+                  existingArticles: existingArticles,
+                  enhancedPrompt: analysisRequest.prompt,
+                  analysisContext: analysisRequest.context,
+                  version: '3.0-professional'
+                })
+              });
+
+              result = await response.json();
+              
+              if (!result.success) {
+                throw new Error(result.error || 'Enhanced Claude API analysis failed');
+              }
+              
+              break; // Success, exit retry loop
+              
+            } catch (apiError) {
+              retryCount++;
+              console.warn(`⚠️ API call failed (attempt ${retryCount}/${maxRetries}): ${apiError.message}`);
+              
+              if (retryCount < maxRetries) {
+                // Exponential backoff: 2s, 4s, 8s
+                const backoffDelay = Math.pow(2, retryCount) * 1000;
+                console.log(`🔄 Retrying in ${backoffDelay/1000}s...`);
+                await new Promise(resolve => setTimeout(resolve, backoffDelay));
+              } else {
+                throw apiError; // Max retries reached, throw error
+              }
+            }
           }
 
           // Validate and enhance the Claude response
@@ -393,9 +422,10 @@ export class RSSService {
         }
       });
 
-      // Brief pause between batches to avoid overwhelming the API
+      // Longer pause between batches to avoid overwhelming the API
       if (i + batchSize < articles.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000)); // Increased pause for enhanced processing
+        const delay = 2000 + Math.random() * 1000; // 2-3 seconds random delay
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
@@ -474,39 +504,44 @@ export class RSSService {
   async processMultipleFeeds(feedConfigs, existingArticles = []) {
     const activeFeeds = feedConfigs.filter(feed => feed.isActive);
     
-    console.log(`Processing ${activeFeeds.length} RSS feeds...`);
+    console.log(`🚀 Processing ${activeFeeds.length} RSS feeds sequentially...`);
     
-    // Process feeds concurrently with reasonable concurrency limit
-    const batchSize = 3;
+    // Process feeds one by one to avoid overwhelming servers and API
     const results = [];
     
-    for (let i = 0; i < activeFeeds.length; i += batchSize) {
-      const batch = activeFeeds.slice(i, i + batchSize);
-      const batchPromises = batch.map(feed => 
-        this.processFeed(feed, existingArticles)
-      );
+    for (let i = 0; i < activeFeeds.length; i++) {
+      const feed = activeFeeds[i];
+      console.log(`📡 Processing feed ${i + 1}/${activeFeeds.length}: ${feed.name}`);
       
-      const batchResults = await Promise.allSettled(batchPromises);
+      try {
+        // Process single feed with timeout
+        const feedPromise = this.processFeed(feed, existingArticles);
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Feed processing timeout')), 60000)
+        );
+        
+        const result = await Promise.race([feedPromise, timeoutPromise]);
+        results.push(result);
+        
+        console.log(`✅ Feed ${feed.name} processed: ${result.intelligenceArticles} signals found`);
+        
+      } catch (error) {
+        console.error(`❌ Failed to process feed ${feed.name}:`, error.message);
+        results.push({
+          success: false,
+          feedId: feed.id,
+          articlesProcessed: 0,
+          intelligenceArticles: 0,
+          articles: [],
+          error: error.message
+        });
+      }
       
-      batchResults.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          results.push(result.value);
-        } else {
-          console.error(`Feed processing failed: ${batch[index].name}`, result.reason);
-          results.push({
-            success: false,
-            feedId: batch[index].id,
-            articlesProcessed: 0,
-            intelligenceArticles: 0,
-            articles: [],
-            error: result.reason.message
-          });
-        }
-      });
-      
-      // Brief pause between batches to avoid overwhelming servers
-      if (i + batchSize < activeFeeds.length) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      // Delay between feeds to prevent API overload (except for last feed)
+      if (i < activeFeeds.length - 1) {
+        const delay = 2000 + Math.random() * 1000; // 2-3 seconds random delay
+        console.log(`⏳ Waiting ${Math.round(delay/1000)}s before next feed...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 

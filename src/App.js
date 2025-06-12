@@ -34,7 +34,7 @@ const App = () => {
   // Initialize data on component mount
   useEffect(() => {
     initializeApplication();
-  }, [initializeApplication]);
+  }, []); // Empty dependency array - run only once on mount
 
   // Auto-refresh RSS feeds
   useEffect(() => {
