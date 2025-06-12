@@ -14,7 +14,8 @@
       "WebFetch(domain:ghostbriefyellow.vercel.app)",
       "Bash(find:*)",
       "Bash(npm test:*)",
-      "Bash(npm run build:*)"
+      "Bash(npm run build:*)",
+      "WebFetch(domain:ghostbriefyellow-1kczxexjr-my-ai-buddy.vercel.app)"
     ],
     "deny": []
   }

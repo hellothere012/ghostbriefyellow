@@ -28,37 +28,13 @@ const App = () => {
   const [briefs, setBriefs] = useState([]);
   const [processingStatus, setProcessingStatus] = useState(null);
   
-  // Settings state
-  const [settings, setSettings] = useState(storageService.getDefaultSettings());
-
-  // Initialize data on component mount
-  useEffect(() => {
-    initializeApplication();
-  }, []); // Empty dependency array - run only once on mount
-
-  // Auto-refresh RSS feeds
-  useEffect(() => {
-    if (settings.autoRefreshInterval > 0) {
-      const interval = setInterval(() => {
-        refreshRSSFeeds();
-      }, settings.autoRefreshInterval * 60 * 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
-
-  /**
-   * Check if we should auto-refresh based on last update time
-   */
-  const shouldAutoRefresh = () => {
-    const lastUpdate = storageService.getLastUpdate();
-    if (!lastUpdate) return true;
-    
-    const timeSinceUpdate = Date.now() - new Date(lastUpdate).getTime();
-    const refreshThreshold = settings.autoRefreshInterval * 60 * 1000;
-    
-    return timeSinceUpdate > refreshThreshold;
-  };
+  // Settings state - initialize with safe defaults
+  const [settings, setSettings] = useState({
+    autoRefreshInterval: 30,
+    relevanceThreshold: 50,
+    maxArticlesPerFeed: 50,
+    enableNotifications: false
+  });
 
   /**
    * Refresh RSS feeds and process articles through AI
@@ -147,6 +123,30 @@ const App = () => {
     }
   }, [rssFeeds, articles]);
 
+  // Auto-refresh RSS feeds
+  useEffect(() => {
+    if (settings.autoRefreshInterval > 0) {
+      const interval = setInterval(() => {
+        refreshRSSFeeds();
+      }, settings.autoRefreshInterval * 60 * 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
+
+  /**
+   * Check if we should auto-refresh based on last update time
+   */
+  const shouldAutoRefresh = () => {
+    const lastUpdate = storageService.getLastUpdate();
+    if (!lastUpdate) return true;
+    
+    const timeSinceUpdate = Date.now() - new Date(lastUpdate).getTime();
+    const refreshThreshold = settings.autoRefreshInterval * 60 * 1000;
+    
+    return timeSinceUpdate > refreshThreshold;
+  };
+
   /**
    * Initialize application with stored data and fetch fresh RSS content
    */
@@ -155,23 +155,40 @@ const App = () => {
       setIsLoading(true);
       console.log('🚀 Initializing Ghost Brief application...');
       
-      // Load stored data (now async with IndexedDB)
-      const storedFeeds = await storageService.getRSSFeeds();
-      const storedArticles = await storageService.getArticles();
-      const storedBriefs = await storageService.getBriefs();
-      const storedSettings = await storageService.getSettings();
+      // Load stored data with fallbacks for production safety
+      let storedFeeds = [];
+      let storedArticles = [];
+      let storedBriefs = [];
+      let storedSettings = settings; // Use current state as fallback
+      
+      try {
+        storedFeeds = await storageService.getRSSFeeds();
+        storedArticles = await storageService.getArticles();
+        storedBriefs = await storageService.getBriefs();
+        storedSettings = await storageService.getSettings();
+        console.log('✅ Storage data loaded successfully');
+      } catch (storageError) {
+        console.warn('⚠️ Storage loading failed, using defaults:', storageError.message);
+        // Continue with empty defaults - app will still work
+      }
       
       // Initialize drill data for testing if no articles exist
       if (storedArticles.length === 0) {
-        console.log('🎯 No articles found, initializing drill data...');
-        await initializeDrillData(storageService);
-        
-        // Reload articles after drill data initialization
-        const updatedArticles = await storageService.getArticles();
-        const updatedBriefs = await storageService.getBriefs();
-        setArticles(updatedArticles);
-        setBriefs(updatedBriefs);
-        console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
+        try {
+          console.log('🎯 No articles found, initializing drill data...');
+          await initializeDrillData(storageService);
+          
+          // Reload articles after drill data initialization
+          const updatedArticles = await storageService.getArticles();
+          const updatedBriefs = await storageService.getBriefs();
+          setArticles(updatedArticles);
+          setBriefs(updatedBriefs);
+          console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
+        } catch (drillError) {
+          console.warn('⚠️ Drill data initialization failed:', drillError.message);
+          setArticles([]);
+          setBriefs([]);
+        }
       } else {
         setArticles(storedArticles);
         setBriefs(storedBriefs);
@@ -188,10 +205,14 @@ const App = () => {
         setBriefs(storedBriefs);
       }
       setSettings(storedSettings);
-      setLastUpdate(await storageService.getLastUpdate());
       
-      // Clean up old data
-      await storageService.cleanupOldData();
+      try {
+        setLastUpdate(await storageService.getLastUpdate());
+        // Clean up old data
+        await storageService.cleanupOldData();
+      } catch (cleanupError) {
+        console.warn('⚠️ Storage cleanup failed:', cleanupError.message);
+      }
       
       // Always fetch fresh RSS content on startup to ensure we have signals
       console.log('🔄 Starting RSS feed processing...');
@@ -217,14 +238,36 @@ const App = () => {
       
     } catch (error) {
       console.error('❌ Application initialization failed:', error);
+      console.error('Error details:', error.stack);
+      
+      // Set safe defaults so app still renders
+      setRssFeeds([]);
+      setArticles([]);
+      setBriefs([]);
       setProcessingStatus({ 
         stage: 'error', 
-        message: `Initialization failed: ${error.message}` 
+        message: `Initialization failed: ${error.message}. App will work with limited functionality.` 
       });
     } finally {
       setIsLoading(false);
     }
-  }, [refreshRSSFeeds]);
+  }, [refreshRSSFeeds, settings]);
+
+  // Initialize data on component mount
+  useEffect(() => {
+    initializeApplication();
+  }, [initializeApplication]);
+
+  // Auto-refresh RSS feeds
+  useEffect(() => {
+    if (settings.autoRefreshInterval > 0) {
+      const interval = setInterval(() => {
+        refreshRSSFeeds();
+      }, settings.autoRefreshInterval * 60 * 1000);
+
+      return () => clearInterval(interval);
+    }
+  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
 
   /**
    * RSS Feed Management Functions
