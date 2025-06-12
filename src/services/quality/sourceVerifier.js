@@ -471,6 +471,7 @@ export class SourceVerifierService {
             case 'STRONG': attributionScore += 20; break;
             case 'MEDIUM': attributionScore += 10; break;
             case 'WEAK': attributionScore -= 10; break;
+            default: break;
           }
         }
       });
@@ -595,6 +596,7 @@ export class SourceVerifierService {
       case 'TIER_2_RELIABLE': summary.tier2Sources++; break;
       case 'TIER_3_STANDARD': summary.tier3Sources++; break;
       case 'TIER_4_QUESTIONABLE': summary.tier4Sources++; break;
+      default: break;
     }
     
     // Count flagged sources

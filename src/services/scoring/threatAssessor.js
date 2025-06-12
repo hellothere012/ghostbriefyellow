@@ -593,6 +593,9 @@ export class ThreatAssessorService {
         recommendations.push('Standard monitoring protocols');
         recommendations.push('Include in routine briefings');
         break;
+      default:
+        recommendations.push('Review and assess threat level');
+        break;
     }
     
     if (score > 90) {

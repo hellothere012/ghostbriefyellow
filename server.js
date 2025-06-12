@@ -4,6 +4,7 @@
 require('dotenv').config();
 const express = require('express');
 const { analyzeArticleWithClaude, processArticlesBatch } = require('./claudeService');
+const { webshareProxy } = require('./webshareProxy');
 
 const app = express();
 const port = process.env.PORT || (process.env.NODE_ENV === 'production' ? 8080 : 3001);
@@ -147,6 +148,71 @@ app.post('/api/analyze-articles-batch', async (req, res) => {
   }
 });
 
+// RSS Fetch endpoint using Webshare proxy
+app.post('/api/fetch-rss', async (req, res) => {
+  try {
+    const { url } = req.body;
+    
+    // Validation
+    if (!url) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'RSS URL is required',
+        details: 'Request body must include a "url" parameter'
+      });
+    }
+
+    // Validate URL format
+    try {
+      new URL(url);
+    } catch (urlError) {
+      return res.status(400).json({ 
+        success: false,
+        error: 'Invalid URL format',
+        details: 'Please provide a valid HTTP/HTTPS URL'
+      });
+    }
+
+    console.log(`📡 Fetching RSS feed via Webshare proxy: ${url}`);
+
+    // Fetch RSS content through Webshare proxy
+    const rssContent = await webshareProxy.fetchRSS(url);
+    
+    console.log(`✅ Successfully fetched RSS content: ${rssContent.length} characters`);
+
+    res.json({ 
+      success: true,
+      content: rssContent,
+      contentLength: rssContent.length,
+      timestamp: new Date().toISOString()
+    });
+
+  } catch (error) {
+    console.error('❌ Error in fetch-rss endpoint:', error);
+    
+    // Determine appropriate error response
+    let statusCode = 500;
+    let errorMessage = 'Failed to fetch RSS content';
+    
+    if (error.message.includes('proxy')) {
+      errorMessage = 'Proxy connection failed';
+    } else if (error.message.includes('timeout')) {
+      statusCode = 504;
+      errorMessage = 'RSS fetch timeout';
+    } else if (error.message.includes('Invalid RSS')) {
+      statusCode = 422;
+      errorMessage = 'Invalid RSS feed format';
+    }
+    
+    res.status(statusCode).json({ 
+      success: false,
+      error: errorMessage,
+      details: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // API documentation endpoint
 app.get('/api/docs', (req, res) => {
   res.json({
@@ -156,6 +222,7 @@ app.get('/api/docs', (req, res) => {
       'GET /api/health': 'Health check and service status',
       'POST /api/analyze-article': 'Analyze single article with Claude AI',
       'POST /api/analyze-articles-batch': 'Analyze multiple articles in batch',
+      'POST /api/fetch-rss': 'Fetch RSS content via Webshare proxy',
       'GET /api/docs': 'This documentation'
     },
     schemas: {

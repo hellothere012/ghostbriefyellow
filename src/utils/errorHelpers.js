@@ -277,7 +277,8 @@ export const retryWithBackoff = async (fn, options = {}) => {
       });
 
       // Wait before next attempt
-      await new Promise(resolve => setTimeout(resolve, delay));
+      const currentDelay = delay;
+      await new Promise(resolve => setTimeout(resolve, currentDelay));
       
       // Increase delay for next attempt
       delay = Math.min(delay * backoffMultiplier, maxDelay);

@@ -43,14 +43,12 @@ class APIConfig {
     const configs = {
       development: {
         apiBaseUrl: process.env.REACT_APP_API_URL || 'http://localhost:3001',
-        corsProxy: 'https://api.allorigins.win/raw?url=',
         timeout: 30000,
         retryAttempts: 3,
         logLevel: 'debug'
       },
       production: {
         apiBaseUrl: process.env.REACT_APP_API_URL || 'https://ghost-brief-api-199177265279.us-central1.run.app',
-        corsProxy: 'https://api.allorigins.win/raw?url=',
         timeout: 45000,
         retryAttempts: 5,
         logLevel: 'error'
@@ -71,14 +69,7 @@ class APIConfig {
     return `${baseUrl}${cleanEndpoint}`;
   }
 
-  /**
-   * Gets the CORS proxy URL for RSS feeds
-   * @param {string} rssUrl - RSS feed URL to proxy
-   * @returns {string} Proxied URL
-   */
-  getCorsProxyUrl(rssUrl) {
-    return `${this.config.corsProxy}${encodeURIComponent(rssUrl)}`;
-  }
+
 
   /**
    * Gets configuration value
@@ -228,7 +219,6 @@ class APIConfig {
       console.log('🔧 Ghost Brief API Configuration:', {
         environment: this.environment,
         apiBaseUrl: this.config.apiBaseUrl,
-        corsProxy: this.config.corsProxy,
         timeout: this.config.timeout,
         retryAttempts: this.config.retryAttempts
       });

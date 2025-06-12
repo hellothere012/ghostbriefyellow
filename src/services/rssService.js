@@ -12,7 +12,6 @@ import { apiConfig } from '../config/api';
  */
 export class RSSService {
   constructor() {
-    this.corsProxy = apiConfig.getCorsProxyUrl.bind(apiConfig);
     this.processingQueue = [];
     this.processedArticles = [];
     this.isProcessing = false;
@@ -90,42 +89,46 @@ export class RSSService {
   }
 
   /**
-   * Fetches RSS content from URL with CORS proxy
+   * Fetches RSS content from URL through backend proxy
    * @param {string} url - RSS feed URL
    * @returns {Promise<string>} RSS content
    */
   async fetchRSSContent(url) {
     console.log(`🌐 Fetching RSS content from: ${url}`);
-    const proxyUrl = this.corsProxy(url);
-    console.log(`🔗 Using proxy URL: ${proxyUrl}`);
     
-    const response = await fetch(proxyUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/rss+xml, application/xml, text/xml',
-        'User-Agent': 'Ghost Brief Intelligence Aggregator 1.0'
+    try {
+      // Call backend RSS proxy endpoint
+      const response = await apiConfig.makeRequest('/api/fetch-rss', {
+        method: 'POST',
+        body: JSON.stringify({ url })
+      });
+
+      console.log(`📡 Backend response status: ${response.status}`);
+
+      const data = await response.json();
+      
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch RSS content');
       }
-    });
 
-    console.log(`📡 Response status: ${response.status} ${response.statusText}`);
+      const content = data.content;
+      console.log(`📄 Content length: ${content.length} characters`);
+      
+      if (!content || content.trim().length === 0) {
+        throw new Error('Empty RSS content received');
+      }
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      // Log first 200 characters for debugging
+      if (apiConfig.isDevelopment()) {
+        console.log(`📝 Content preview: ${content.substring(0, 200)}...`);
+      }
+
+      return content;
+      
+    } catch (error) {
+      console.error(`❌ RSS fetch failed: ${error.message}`);
+      throw new Error(`RSS fetch failed: ${error.message}`);
     }
-
-    const content = await response.text();
-    console.log(`📄 Content length: ${content.length} characters`);
-    
-    if (!content || content.trim().length === 0) {
-      throw new Error('Empty RSS content received');
-    }
-
-    // Log first 200 characters for debugging
-    if (apiConfig.isDevelopment()) {
-      console.log(`📝 Content preview: ${content.substring(0, 200)}...`);
-    }
-
-    return content;
   }
 
   /**
