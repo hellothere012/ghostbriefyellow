@@ -436,7 +436,7 @@ export class RetentionManagerService {
         // IndexedDB usage estimation
         const articles = await indexedDBService.getArticles();
         const briefings = await indexedDBService.getBriefs();
-        const feeds = await indexedDBService.getFeeds();
+        const feeds = await indexedDBService.getRSSFeeds();
         
         const estimatedSize = 
           (articles.length * 2048) + // ~2KB per article

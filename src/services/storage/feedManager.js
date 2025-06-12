@@ -220,7 +220,7 @@ export class FeedManagerService {
       console.log(`💾 Saving ${feeds.length} RSS feeds...`);
 
       if (await this.isIndexedDBAvailable()) {
-        await indexedDBService.saveFeeds(feeds);
+        await indexedDBService.saveRSSFeeds(feeds);
       } else {
         localStorage.setItem(this.STORAGE_KEY, JSON.stringify(feeds));
       }
@@ -240,7 +240,7 @@ export class FeedManagerService {
   async getRSSFeeds() {
     try {
       if (await this.isIndexedDBAvailable()) {
-        const feeds = await indexedDBService.getFeeds();
+        const feeds = await indexedDBService.getRSSFeeds();
         console.log(`📡 Retrieved ${feeds.length} RSS feeds from IndexedDB`);
         return feeds;
       } else {

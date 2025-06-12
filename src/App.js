@@ -450,9 +450,6 @@ const App = () => {
 
   return (
     <div className="min-h-screen" style={{backgroundColor: 'var(--bg-primary)'}}>
-      {/* Matrix scan line animation */}
-      <div className="matrix-scan-line"></div>
-      
       {/* Loading overlay */}
       {isLoading && <LoadingOverlay status={processingStatus} />}
       
