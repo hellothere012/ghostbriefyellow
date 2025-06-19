@@ -1,0 +1,38 @@
+# Dockerfile ignore file for Google Cloud Run deployment
+
+# Dependencies
+node_modules/
+npm-debug.log*
+
+# Development files
+.env
+.env.*
+test-*.js
+
+# React build files (not needed for backend)
+src/
+public/
+build/
+
+# Development tools
+.git/
+.gitignore
+README.md
+*.md
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
