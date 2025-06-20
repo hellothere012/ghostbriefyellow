@@ -27,11 +27,18 @@ Ghost Brief is a professional-grade AI-powered intelligence briefing dashboard t
 ### Core Services
 
 #### RSS Service (`src/services/rssService.js`)
-- Fetches and parses RSS feeds using CORS proxy
+- Fetches and parses RSS feeds using CORS proxy and Webshare proxy integration
 - Processes articles through AI analysis pipeline
 - Handles duplicate detection and advertisement filtering
 - Implements intelligent content scoring and priority assignment
 - Supports concurrent feed processing with error handling
+
+#### Webshare Proxy Service (`webshareProxy.js`)
+- Professional RSS proxy integration using rotating residential proxies
+- HTTP and SOCKS5 proxy support with authentication
+- Enhanced reliability for RSS feed fetching
+- Built-in connection testing and error handling
+- User-Agent and header management for stealth operations
 
 #### Storage Service (`src/services/storageService.js`)
 - Manages IndexedDB data persistence for feeds, articles, and briefs
@@ -424,6 +431,13 @@ REACT_APP_API_URL=https://ghost-brief-api-199177265279.us-central1.run.app
 # Environment override (development|production)
 # Leave blank to auto-detect based on hostname
 REACT_APP_ENV=production
+
+# Webshare Proxy Configuration (Optional)
+WEBSHARE_PROXY_HOST=p.webshare.io
+WEBSHARE_PROXY_PORT=80
+WEBSHARE_USERNAME=your_webshare_username
+WEBSHARE_PASSWORD=your_webshare_password
+WEBSHARE_PROXY_TYPE=http
 ```
 
 ### Switching Between Environments
@@ -532,6 +546,7 @@ NODE_ENV=development
 
 ### RSS Processing
 - **CORS Proxy**: `https://api.allorigins.win/raw?url=` for feed fetching
+- **Webshare Proxy**: Professional rotating residential proxies for enhanced reliability
 - **Sequential Processing**: One feed at a time to prevent overload
 - **Rate Limiting**: Max 2 concurrent requests with retry logic
 - **Fallback Analysis**: Client-side intelligence when API fails
@@ -584,3 +599,18 @@ Environment is determined by:
 - **Sequential RSS Processing**: Prevents system overload
 - **Memory Management**: Automatic cleanup and retention policies
 - **Rate Limiting**: Prevents API throttling and service degradation
+
+## Code Quality & Standards
+
+### ESLint Configuration
+- **Strict ESLint rules** with warnings treated as non-blocking
+- **Required default cases** in switch statements for completeness
+- **Loop function safety** to prevent variable capture issues
+- **React hooks exhaustive dependencies** to ensure proper re-rendering
+
+### Recent Code Quality Improvements
+- **Switch Statement Defaults**: Added default cases to all switch statements in:
+  - `src/services/quality/sourceVerifier.js` - Source tier assessment and verification summary
+  - `src/services/scoring/threatAssessor.js` - Threat level recommendation generation
+- **Loop Function Safety**: Fixed unsafe variable references in retry mechanism (`src/utils/errorHelpers.js`)
+- **Production Build Verification**: All code compiles cleanly with only non-blocking warnings
