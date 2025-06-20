@@ -1,12 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import './styles/index.css';
 
-// Services
-import { rssService } from './services/rssService';
-import { storageService } from './services/storageService';
-
-// Drill data for testing
-import { initializeDrillData } from './data/drillData';
+// New Database Services
+import { databaseService } from './services/databaseService';
+import { databaseMigrationService } from './services/databaseMigration';
 
 // Components
 import Header from './components/common/Header';
@@ -22,431 +19,348 @@ const App = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   
-  // Data state
-  const [rssFeeds, setRssFeeds] = useState([]);
-  const [feedsLoaded, setFeedsLoaded] = useState(false);
-  const [articles, setArticles] = useState([]);
+  // Database state
+  const [signals, setSignals] = useState([]);
   const [briefs, setBriefs] = useState([]);
+  const [rssFeeds, setRssFeeds] = useState([]);
+  const [stats, setStats] = useState(null);
   const [processingStatus, setProcessingStatus] = useState(null);
   
   // Processing locks
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   
-  // Settings state - initialize with safe defaults
-  const [settings, setSettings] = useState({
-    autoRefreshInterval: 30,
-    relevanceThreshold: 50,
-    maxArticlesPerFeed: 50,
-    enableNotifications: false
-  });
+  // Migration state
+  const [migrationStatus, setMigrationStatus] = useState(null);
 
   /**
-   * Refresh RSS feeds and process articles through AI
+   * Process RSS feeds through new database system
    */
-  const refreshRSSFeeds = useCallback(async () => {
+  const processRSSFeeds = useCallback(async () => {
     // Prevent overlapping processing runs
     if (isProcessing) {
       console.log('🔒 RSS processing already in progress, skipping...');
       return;
     }
     
-    if (!feedsLoaded) {
-      console.log('⏳ Feeds not loaded yet, skipping refresh...');
-      return;
-    }
-    
     try {
       setIsProcessing(true);
       setIsLoading(true);
-      setProcessingStatus({ stage: 'fetching', message: 'Fetching RSS feeds...' });
-      console.log('🔄 Starting RSS feed refresh...');
+      setProcessingStatus({ stage: 'processing', message: 'Processing RSS feeds with AI analysis...' });
+      console.log('🔄 Starting RSS feed processing...');
       
-      const activeFeeds = rssFeeds.filter(feed => feed.isActive);
-      console.log(`📡 Found ${activeFeeds.length} active feeds out of ${rssFeeds.length} total feeds`);
+      // Trigger server-side RSS processing
+      const result = await databaseService.processRSSFeeds();
       
-      if (activeFeeds.length === 0) {
-        console.warn('⚠️ No active RSS feeds configured');
-        setProcessingStatus({ stage: 'warning', message: 'No active RSS feeds configured. Please activate feeds in Feed Management.' });
-        return;
-      }
-      
-      setProcessingStatus({ 
-        stage: 'processing', 
-        message: `Processing ${activeFeeds.length} RSS feeds...` 
-      });
-      
-      // Process RSS feeds with AI analysis
-      console.log('🤖 Starting AI analysis of RSS feeds...');
-      const result = await rssService.processMultipleFeeds(activeFeeds, articles);
-      console.log('📊 RSS processing result:', result);
-      
-      if (result.intelligenceArticles > 0) {
-        console.log(`✅ Found ${result.intelligenceArticles} intelligence articles from ${result.totalArticlesProcessed} total articles`);
-        
-        // Update articles state
-        const updatedArticles = [...articles, ...result.articles];
-        console.log(`📰 Updating articles state: ${articles.length} → ${updatedArticles.length}`);
-        setArticles(updatedArticles);
-        
-        // Save to storage
-        storageService.addArticles(result.articles);
-        console.log('💾 Articles saved to storage');
-        
-        // Update feed statuses
-        result.feedResults.forEach(feedResult => {
-          console.log(`📡 Feed ${feedResult.feedId}: ${feedResult.success ? 'SUCCESS' : 'FAILED'}`);
-          storageService.updateFeedStatus(
-            feedResult.feedId, 
-            feedResult.success ? 'active' : 'error',
-            feedResult.success ? 0 : 1
-          );
-        });
-        
-        // Refresh feeds state to show updated statuses
-        setRssFeeds(storageService.getRSSFeeds());
-        setLastUpdate(new Date().toISOString());
-        
+      if (result.success) {
+        console.log('✅ RSS processing completed:', result);
         setProcessingStatus({ 
           stage: 'success', 
-          message: `Processed ${result.totalArticlesProcessed} articles, found ${result.intelligenceArticles} intelligence items` 
+          message: result.message || 'RSS processing completed successfully'
         });
+        
+        // Refresh data from database
+        await Promise.all([
+          loadSignals(),
+          loadStats()
+        ]);
+        
+        setLastUpdate(new Date().toISOString());
         
       } else {
-        console.warn('⚠️ No intelligence articles found in RSS processing');
-        console.log('📊 Processing details:', {
-          totalFeeds: result.totalFeeds,
-          successfulFeeds: result.successfulFeeds,
-          totalArticlesProcessed: result.totalArticlesProcessed,
-          feedResults: result.feedResults
-        });
-        
+        console.error('❌ RSS processing failed:', result);
         setProcessingStatus({ 
-          stage: 'warning', 
-          message: `Processed ${result.totalArticlesProcessed || 0} articles but found no intelligence content. Check feed URLs and content.` 
+          stage: 'error', 
+          message: result.error || 'RSS processing failed'
         });
       }
       
     } catch (error) {
-      console.error('❌ RSS refresh failed:', error);
-      console.error('Error details:', error.stack);
+      console.error('❌ RSS processing failed:', error);
       setProcessingStatus({ 
         stage: 'error', 
-        message: `RSS refresh failed: ${error.message}` 
+        message: `RSS processing failed: ${error.message}` 
       });
     } finally {
       setIsLoading(false);
       setIsProcessing(false);
-      setTimeout(() => setProcessingStatus(null), 8000); // Extended timeout for debugging
+      setTimeout(() => setProcessingStatus(null), 8000);
     }
-  }, [rssFeeds, articles, isProcessing, feedsLoaded]);
-
-  // Auto-refresh RSS feeds
-  useEffect(() => {
-    if (settings.autoRefreshInterval > 0) {
-      const interval = setInterval(() => {
-        refreshRSSFeeds();
-      }, settings.autoRefreshInterval * 60 * 1000);
-
-      return () => clearInterval(interval);
-    }
-  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
+  }, [isProcessing]);
 
   /**
-   * Check if we should auto-refresh based on last update time
+   * Load signals from database
    */
-  const shouldAutoRefresh = () => {
-    const lastUpdate = storageService.getLastUpdate();
-    if (!lastUpdate) return true;
-    
-    const timeSinceUpdate = Date.now() - new Date(lastUpdate).getTime();
-    const refreshThreshold = settings.autoRefreshInterval * 60 * 1000;
-    
-    return timeSinceUpdate > refreshThreshold;
-  };
+  const loadSignals = useCallback(async (filters = {}) => {
+    try {
+      const response = await databaseService.getSignals({
+        limit: 50,
+        offset: 0,
+        ...filters
+      });
+      
+      if (response.success) {
+        setSignals(response.signals);
+        console.log(`📊 Loaded ${response.signals.length} signals from database`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error loading signals:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
 
   /**
-   * Initialize application with stored data and fetch fresh RSS content
+   * Load briefs from database
+   */
+  const loadBriefs = useCallback(async () => {
+    try {
+      const response = await databaseService.getBriefs({
+        limit: 20,
+        offset: 0
+      });
+      
+      if (response.success) {
+        setBriefs(response.briefs);
+        console.log(`🧠 Loaded ${response.briefs.length} briefs from database`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error loading briefs:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  /**
+   * Load RSS feeds from database
+   */
+  const loadFeeds = useCallback(async () => {
+    try {
+      const response = await databaseService.getFeeds();
+      
+      if (response.success) {
+        setRssFeeds(response.feeds);
+        console.log(`📡 Loaded ${response.feeds.length} RSS feeds from database`);
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error loading feeds:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  /**
+   * Load statistics from database
+   */
+  const loadStats = useCallback(async () => {
+    try {
+      const response = await databaseService.getStats();
+      
+      if (response.success) {
+        setStats(response.stats);
+        console.log('📈 Loaded statistics from database');
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('❌ Error loading stats:', error);
+      return { success: false, error: error.message };
+    }
+  }, []);
+
+  /**
+   * Initialize application with database
    */
   const initializeApplication = useCallback(async () => {
     try {
       setIsLoading(true);
-      console.log('🚀 Initializing Ghost Brief application...');
+      console.log('🚀 Initializing Ghost Brief with database...');
       
-      // Load stored data with fallbacks for production safety
-      let storedFeeds = [];
-      let storedArticles = [];
-      let storedBriefs = [];
-      let storedSettings = settings; // Use current state as fallback
-      
+      // Check if migration is needed from old IndexedDB system
       try {
-        storedFeeds = await storageService.getRSSFeeds();
-        storedArticles = await storageService.getArticles();
-        storedBriefs = await storageService.getBriefs();
-        storedSettings = await storageService.getSettings();
-        console.log('✅ Storage data loaded successfully');
-      } catch (storageError) {
-        console.warn('⚠️ Storage loading failed, using defaults:', storageError.message);
-        // Continue with empty defaults - app will still work
-      }
-      
-      // Initialize drill data for testing if no articles exist
-      if (storedArticles.length === 0) {
-        try {
-          console.log('🎯 No articles found, initializing drill data...');
-          await initializeDrillData(storageService);
+        const migrationCheck = await databaseMigrationService.checkMigrationNeeded();
+        if (migrationCheck.needed) {
+          console.log('🔄 Migration needed from IndexedDB to database');
+          setMigrationStatus({ stage: 'running', message: 'Migrating data to new database...' });
           
-          // Reload articles after drill data initialization
-          const updatedArticles = await storageService.getArticles();
-          const updatedBriefs = await storageService.getBriefs();
-          setArticles(updatedArticles);
-          setBriefs(updatedBriefs);
-          console.log(`🎯 Drill data loaded: ${updatedArticles.length} articles, ${updatedBriefs.length} briefs`);
-        } catch (drillError) {
-          console.warn('⚠️ Drill data initialization failed:', drillError.message);
-          setArticles([]);
-          setBriefs([]);
+          const migrationResult = await databaseMigrationService.migrateToDatabase();
+          if (migrationResult.success) {
+            setMigrationStatus({ stage: 'success', message: 'Data migration completed successfully' });
+            console.log('✅ Migration completed:', migrationResult.summary);
+          } else {
+            setMigrationStatus({ stage: 'error', message: 'Migration had errors but continued' });
+          }
+          
+          setTimeout(() => setMigrationStatus(null), 10000);
         }
-      } else {
-        setArticles(storedArticles);
-        setBriefs(storedBriefs);
+      } catch (migrationError) {
+        console.warn('⚠️ Migration check failed:', migrationError.message);
       }
       
-      console.log(`📡 Loaded ${storedFeeds.length} RSS feeds from storage`);
-      console.log(`📰 Total articles available: ${await storageService.getArticles().then(a => a.length)}`);
-      console.log(`🧠 Total briefs available: ${await storageService.getBriefs().then(b => b.length)}`);
-      
-      setRssFeeds(storedFeeds);
-      setFeedsLoaded(true); // Mark feeds as loaded
-      // Articles and briefs already set above based on drill data initialization
-      if (storedArticles.length > 0) {
-        setArticles(storedArticles);
-        setBriefs(storedBriefs);
-      }
-      setSettings(storedSettings);
-      
+      // Initialize default feeds if none exist
       try {
-        setLastUpdate(await storageService.getLastUpdate());
-        // Clean up old data
-        await storageService.cleanupOldData();
-      } catch (cleanupError) {
-        console.warn('⚠️ Storage cleanup failed:', cleanupError.message);
+        const feedsResponse = await loadFeeds();
+        if (!feedsResponse.success || feedsResponse.feeds?.length === 0) {
+          console.log('📡 No feeds found, initializing default feeds...');
+          await databaseService.initializeDefaultFeeds();
+          await loadFeeds(); // Reload after initialization
+        }
+      } catch (error) {
+        console.warn('⚠️ Feed initialization failed:', error.message);
       }
       
-      console.log('✅ Application initialization complete. RSS processing will be handled by useEffect.');
+      // Load all data from database
+      await Promise.all([
+        loadSignals(),
+        loadBriefs(),
+        loadStats()
+      ]);
+      
+      setIsInitialized(true);
+      console.log('✅ Application initialization complete');
       
     } catch (error) {
       console.error('❌ Application initialization failed:', error);
-      console.error('Error details:', error.stack);
-      
-      // Set safe defaults so app still renders
-      setRssFeeds([]);
-      setArticles([]);
-      setBriefs([]);
       setProcessingStatus({ 
         stage: 'error', 
-        message: `Initialization failed: ${error.message}. App will work with limited functionality.` 
+        message: `Initialization failed: ${error.message}. Some features may not work.` 
       });
     } finally {
       setIsLoading(false);
     }
-  }, [refreshRSSFeeds, settings]);
+  }, [loadSignals, loadBriefs, loadFeeds, loadStats]);
 
   // Initialize data on component mount
   useEffect(() => {
     initializeApplication();
   }, [initializeApplication]);
 
-  // Auto-refresh RSS feeds
+  // Auto-refresh RSS processing
   useEffect(() => {
-    if (settings.autoRefreshInterval > 0) {
+    if (isInitialized) {
       const interval = setInterval(() => {
-        refreshRSSFeeds();
-      }, settings.autoRefreshInterval * 60 * 1000);
+        processRSSFeeds();
+      }, 30 * 60 * 1000); // Every 30 minutes
 
       return () => clearInterval(interval);
     }
-  }, [settings.autoRefreshInterval, refreshRSSFeeds]);
-
-  // Trigger RSS refresh when feeds are loaded and available
-  useEffect(() => {
-    if (feedsLoaded && rssFeeds.length > 0 && !isProcessing) {
-      const activeFeeds = rssFeeds.filter(feed => feed.isActive);
-      if (activeFeeds.length > 0) {
-        console.log('🚀 Feeds loaded, triggering initial RSS refresh...');
-        // Use setTimeout to avoid immediate processing during initialization
-        setTimeout(() => {
-          refreshRSSFeeds();
-        }, 1000);
-      }
-    }
-  }, [feedsLoaded, rssFeeds, isProcessing, refreshRSSFeeds]);
+  }, [isInitialized, processRSSFeeds]);
 
   /**
    * RSS Feed Management Functions
    */
   const handleAddFeed = async (feedConfig) => {
     try {
-      const success = await storageService.addRSSFeed(feedConfig);
-      if (success) {
-        setRssFeeds(await storageService.getRSSFeeds());
+      setProcessingStatus({ stage: 'adding', message: `Adding feed: ${feedConfig.name}...` });
+      
+      const response = await databaseService.createFeed(feedConfig);
+      if (response.success) {
+        // Reload feeds from database
+        await loadFeeds();
         
-        // Immediately test the new feed
-        setProcessingStatus({ stage: 'testing', message: `Testing new feed: ${feedConfig.name}...` });
-        const testResult = await rssService.processFeed(feedConfig, articles);
-        
-        if (testResult.success) {
-          setProcessingStatus({ 
-            stage: 'success', 
-            message: `Feed added successfully: ${testResult.intelligenceArticles} articles processed` 
-          });
-          
-          if (testResult.articles.length > 0) {
-            const updatedArticles = [...articles, ...testResult.articles];
-            setArticles(updatedArticles);
-            storageService.addArticles(testResult.articles);
-          }
-        } else {
-          setProcessingStatus({ 
-            stage: 'warning', 
-            message: `Feed added but test failed: ${testResult.error}` 
-          });
-        }
+        setProcessingStatus({ 
+          stage: 'success', 
+          message: `Feed added successfully: ${feedConfig.name}` 
+        });
         
         setTimeout(() => setProcessingStatus(null), 5000);
         return true;
       }
       return false;
     } catch (error) {
+      console.error('Error adding feed:', error);
       setProcessingStatus({ stage: 'error', message: `Failed to add feed: ${error.message}` });
       setTimeout(() => setProcessingStatus(null), 5000);
       return false;
     }
   };
 
-  const handleUpdateFeed = (feedId, updates) => {
-    const success = storageService.updateRSSFeed(feedId, updates);
-    if (success) {
-      setRssFeeds(storageService.getRSSFeeds());
+  const handleUpdateFeed = async (feedId, updates) => {
+    try {
+      const response = await databaseService.updateFeed({ id: feedId, ...updates });
+      if (response.success) {
+        await loadFeeds();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error updating feed:', error);
+      return false;
     }
-    return success;
   };
 
-  const handleDeleteFeed = (feedId) => {
-    const success = storageService.deleteRSSFeed(feedId);
-    if (success) {
-      setRssFeeds(storageService.getRSSFeeds());
-      
-      // Remove articles from deleted feed
-      const remainingArticles = articles.filter(article => 
-        article.source.feedId !== feedId
-      );
-      setArticles(remainingArticles);
-      storageService.saveArticles(remainingArticles);
+  const handleDeleteFeed = async (feedId) => {
+    try {
+      const response = await databaseService.deleteFeed(feedId);
+      if (response.success) {
+        await loadFeeds();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error deleting feed:', error);
+      return false;
     }
-    return success;
   };
 
   /**
    * Brief Management Functions
    */
-  const handleCreateBrief = (briefData) => {
-    const success = storageService.addBrief(briefData);
-    if (success) {
-      setBriefs(storageService.getBriefs());
+  const handleCreateBrief = async (briefData) => {
+    try {
+      const response = await databaseService.createBrief(briefData);
+      if (response.success) {
+        await loadBriefs();
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Error creating brief:', error);
+      return false;
     }
-    return success;
   };
 
-  const handlePromoteArticleToBrief = (article) => {
+  const handlePromoteSignalToBrief = async (signal) => {
     const briefData = {
-      title: article.title,
-      summary: article.content || article.summary,
-      url: article.url,
-      source: 'promoted_article',
-      originalArticle: article,
-      intelligence: article.intelligence,
-      tags: article.intelligence?.tags || [],
-      priority: article.intelligence?.priority || 'MEDIUM',
-      category: article.intelligence?.categories?.[0] || 'GENERAL'
+      title: signal.title,
+      summary: signal.summary,
+      status: 'PUBLISHED',
+      classification: 'UNCLASSIFIED',
+      keywords: signal.category || [],
+      version: 1,
+      datePublished: new Date(),
+      relatedSignalIds: [signal.id]
     };
     
-    return handleCreateBrief(briefData);
+    return await handleCreateBrief(briefData);
   };
 
   /**
-   * Settings Management
+   * Dashboard metrics from database stats
    */
-  const handleUpdateSettings = (newSettings) => {
-    const success = storageService.saveSettings(newSettings);
-    if (success) {
-      setSettings(newSettings);
-    }
-    return success;
-  };
-
-  /**
-   * Data Processing and Filtering
-   */
-  
-  // Filter articles for signals (live RSS data, < 30 days)
-  const signalsData = useMemo(() => {
-    const thirtyDaysAgo = Date.now() - (30 * 24 * 60 * 60 * 1000);
-    
-    return articles
-      .filter(article => {
-        const articleDate = new Date(article.publishedAt || article.fetchedAt).getTime();
-        return articleDate > thirtyDaysAgo && 
-               article.intelligence && 
-               article.intelligence.relevanceScore >= settings.relevanceThreshold;
-      })
-      .sort((a, b) => {
-        // Sort by priority and relevance score
-        const priorityOrder = { 'CRITICAL': 4, 'HIGH': 3, 'MEDIUM': 2, 'LOW': 1 };
-        const aPriority = priorityOrder[a.intelligence?.priority] || 1;
-        const bPriority = priorityOrder[b.intelligence?.priority] || 1;
-        
-        if (aPriority !== bPriority) return bPriority - aPriority;
-        return (b.intelligence?.relevanceScore || 0) - (a.intelligence?.relevanceScore || 0);
-      })
-      .slice(0, 100); // Limit for performance
-  }, [articles, settings.relevanceThreshold]);
-
-  // Combine briefs with high-value articles
-  const briefsData = useMemo(() => {
-    const highValueArticles = articles
-      .filter(article => 
-        article.intelligence && 
-        article.intelligence.relevanceScore >= 80 && 
-        article.intelligence.priority === 'CRITICAL'
-      )
-      .map(article => ({
-        ...article,
-        isPermanent: false,
-        source: 'auto_promoted'
-      }));
-    
-    return [...briefs, ...highValueArticles]
-      .sort((a, b) => {
-        const aDate = new Date(a.createdAt || a.publishedAt || a.fetchedAt).getTime();
-        const bDate = new Date(b.createdAt || b.publishedAt || b.fetchedAt).getTime();
-        return bDate - aDate;
-      });
-  }, [briefs, articles]);
-
-  // Dashboard metrics
   const dashboardMetrics = useMemo(() => {
-    const criticalSignals = signalsData.filter(s => s.intelligence?.priority === 'CRITICAL').length;
-    const totalSignals = signalsData.length;
-    const activeFeedsCount = rssFeeds.filter(f => f.isActive).length;
+    if (!stats) {
+      return {
+        activeSignals: 0,
+        criticalSignals: 0,
+        activeFeeds: 0,
+        lastUpdate: null,
+        criticalPercentage: 0
+      };
+    }
     
     return {
-      activeSignals: totalSignals,
-      criticalSignals,
-      activeFeeds: activeFeedsCount,
+      activeSignals: stats.overview?.totalSignals || 0,
+      criticalSignals: stats.escalation?.CRITICAL || 0,
+      activeFeeds: stats.overview?.activeFeeds || 0,
       lastUpdate,
-      criticalPercentage: totalSignals > 0 ? Math.round((criticalSignals / totalSignals) * 100) : 0
+      criticalPercentage: stats.overview?.totalSignals > 0 ? 
+        Math.round(((stats.escalation?.CRITICAL || 0) / stats.overview.totalSignals) * 100) : 0
     };
-  }, [signalsData, rssFeeds, lastUpdate]);
+  }, [stats, lastUpdate]);
 
   /**
    * Navigation handler
@@ -454,9 +368,14 @@ const App = () => {
   const handleTabChange = (tab) => {
     setActiveTab(tab);
     
-    // Auto-refresh data when switching to certain tabs
-    if ((tab === 'dashboard' || tab === 'signals') && shouldAutoRefresh()) {
-      refreshRSSFeeds();
+    // Refresh data when switching to certain tabs
+    if (tab === 'dashboard' || tab === 'signals') {
+      loadSignals();
+      loadStats();
+    } else if (tab === 'briefs') {
+      loadBriefs();
+    } else if (tab === 'feeds') {
+      loadFeeds();
     }
   };
 
@@ -468,9 +387,10 @@ const App = () => {
       {/* Header */}
       <Header 
         metrics={dashboardMetrics}
-        onRefresh={refreshRSSFeeds}
+        onRefresh={processRSSFeeds}
         isRefreshing={isLoading}
         processingStatus={processingStatus}
+        migrationStatus={migrationStatus}
       />
 
       {/* Navigation */}
@@ -501,25 +421,27 @@ const App = () => {
         {activeTab === 'dashboard' && (
           <Dashboard 
             metrics={dashboardMetrics}
-            featuredSignals={signalsData.slice(0, 5)}
-            onPromoteToBrief={handlePromoteArticleToBrief}
+            featuredSignals={signals.slice(0, 5)}
+            onPromoteToBrief={handlePromoteSignalToBrief}
+            stats={stats}
           />
         )}
         
         {activeTab === 'briefs' && (
           <Briefs 
-            briefs={briefsData}
+            briefs={briefs}
             onCreateBrief={handleCreateBrief}
-            onPromoteToBrief={handlePromoteArticleToBrief}
+            onPromoteToBrief={handlePromoteSignalToBrief}
+            signals={signals}
           />
         )}
         
         {activeTab === 'signals' && (
           <Signals 
-            signals={signalsData}
-            onPromoteToBrief={handlePromoteArticleToBrief}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
+            signals={signals}
+            onPromoteToBrief={handlePromoteSignalToBrief}
+            onLoadMore={() => loadSignals({ offset: signals.length })}
+            stats={stats}
           />
         )}
         
@@ -529,10 +451,8 @@ const App = () => {
             onAddFeed={handleAddFeed}
             onUpdateFeed={handleUpdateFeed}
             onDeleteFeed={handleDeleteFeed}
-            onTestFeed={(feed) => rssService.processFeed(feed, articles)}
-            statistics={storageService.getStorageStats()}
-            settings={settings}
-            onUpdateSettings={handleUpdateSettings}
+            onProcessFeeds={processRSSFeeds}
+            stats={stats}
           />
         )}
       </main>

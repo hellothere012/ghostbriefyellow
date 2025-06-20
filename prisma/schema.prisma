@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Signal {
+  id             String   @id @default(uuid())
+  title          String
+  summary        String?
+  content        String?
+  sourceUrl      String   @unique
+  sourceType     String?
+  escalationRisk String?
+  credibility    Float?
+  signalScore    Float?
+  category       String[]
+  region         String[]
+  createdAt      DateTime @default(now())
+}
+
+model Brief {
+  id            String   @id @default(uuid())
+  title         String
+  summary       String?
+  status        String?
+  classification String?
+  keywords      String[]
+  version       Int?
+  datePublished DateTime?
+  relatedSignalIds String[]
+  createdAt     DateTime @default(now())
+}
+
+model FeedTracking {
+  feedId         String   @id
+  lastSeenUrl    String
+  lastFetchedAt  DateTime @default(now())
+}
+
+model RSSFeed {
+  id              String   @id @default(uuid())
+  name            String
+  url             String   @unique
+  category        String
+  tags            String[]
+  isActive        Boolean  @default(true)
+  credibilityScore Int     @default(70)
+  lastFetched     DateTime?
+  status          String   @default("active")
+  errorCount      Int      @default(0)
+  addedAt         DateTime @default(now())
+} 
