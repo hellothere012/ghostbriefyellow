@@ -628,7 +628,11 @@ export class SourceVerifierService {
       recommendations.push('Exercise caution - source has warning flags');
     }
     
-    return recommendations;
+    if (trustLevel === 'CRITICAL') {
+      recommendations.push('Immediate review of source flagged for critical issues');
+    }
+    
+    return recommendations.join('. ');
   }
 }
 
