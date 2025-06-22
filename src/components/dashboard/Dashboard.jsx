@@ -1,11 +1,11 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import MetricCard from './MetricCard.jsx';
 import FeaturedSignal from './FeaturedSignal.jsx';
 import FinintAlert from './FinintAlert.jsx';
 
 const Dashboard = ({ metrics, featuredSignals, onPromoteToBrief }) => {
-  // Calculate financial intelligence alert
-  const generateFinintAlert = () => {
+  // Memoize financial intelligence alert to prevent flicker
+  const finintData = useMemo(() => {
     const cryptoMovements = Math.floor(Math.random() * 100) + 20;
     const exchanges = Math.floor(Math.random() * 5) + 3;
     
@@ -17,9 +17,7 @@ const Dashboard = ({ metrics, featuredSignals, onPromoteToBrief }) => {
       }),
       content: `Unusual crypto movements detected. $${cryptoMovements}M in ${Math.floor(Math.random() * 12) + 1} hours across ${exchanges} exchanges. Pattern analysis suggests coordinated state-level activity.`
     };
-  };
-
-  const finintData = generateFinintAlert();
+  }, []); // Remove unnecessary metrics dependency
 
   return (
     <div id="dashboard-content" className="content-section">

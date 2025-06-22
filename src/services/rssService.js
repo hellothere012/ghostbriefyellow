@@ -5,6 +5,7 @@
 import { analyzeArticleIntelligence, filterByRelevance, sortByIntelligencePriority } from '../utils/intelligenceAnalyzer';
 import { claudeAnalysisService } from './claudeAnalysisService';
 import { signalQualityFilterService } from './signalQualityFilter';
+import { storageService } from './storageService';
 import { apiConfig } from '../config/api';
 
 /**
@@ -45,21 +46,45 @@ export class RSSService {
     try {
       console.log(`Processing RSS feed: ${feedConfig.name}`);
       
+      // Get last fetched timestamp for incremental processing
+      const lastFetched = await storageService.getLastFetched(feedId) || 0;
+      const currentTime = Date.now();
+      console.log(`📅 Feed ${feedId} last fetched: ${lastFetched ? new Date(lastFetched).toISOString() : 'never'}`);
+      
       // Fetch RSS content
       const rssContent = await this.fetchRSSContent(feedConfig.url);
       
       // Parse RSS to articles
       const rawArticles = await this.parseRSSContent(rssContent, feedConfig);
+      console.log(`📰 Parsed ${rawArticles.length} raw articles from RSS`);
       
-      // Process articles through AI analysis
-      const processedArticles = await this.processArticlesWithAI(
-        rawArticles, 
-        feedConfig, 
-        existingArticles
-      );
+      // Filter for new articles only (based on publish date)
+      const newArticles = rawArticles.filter(article => {
+        const articleDate = new Date(article.pubDate || article.publishedAt).getTime();
+        return articleDate > lastFetched;
+      });
       
-      // Filter and sort by intelligence value using advanced pipeline
-      const intelligenceArticles = await this.filterAndSortArticles(processedArticles);
+      console.log(`🆕 Found ${newArticles.length} new articles since last fetch`);
+      
+      // Only process if we have new articles
+      let intelligenceArticles = [];
+      if (newArticles.length > 0) {
+        // Process new articles through AI analysis
+        const processedArticles = await this.processArticlesWithAI(
+          newArticles, 
+          feedConfig, 
+          existingArticles
+        );
+        
+        // Filter and sort by intelligence value using advanced pipeline
+        intelligenceArticles = await this.filterAndSortArticles(processedArticles);
+        
+        // Update last fetched timestamp
+        await storageService.setLastFetched(feedId, currentTime);
+        console.log(`✅ Updated lastFetched for feed ${feedId} to ${new Date(currentTime).toISOString()}`);
+      } else {
+        console.log(`⏭️ No new articles to process for feed ${feedId}`);
+      }
       
       // Update feed metadata
       this.updateFeedMetadata(feedId, true);
@@ -68,6 +93,7 @@ export class RSSService {
         success: true,
         feedId,
         articlesProcessed: rawArticles.length,
+        newArticles: newArticles.length,
         intelligenceArticles: intelligenceArticles.length,
         articles: intelligenceArticles,
         error: null
@@ -81,6 +107,7 @@ export class RSSService {
         success: false,
         feedId,
         articlesProcessed: 0,
+        newArticles: 0,
         intelligenceArticles: 0,
         articles: [],
         error: error.message

@@ -730,6 +730,40 @@ export class StorageService {
     }
   }
 
+  /**
+   * Feed timestamp management for incremental processing
+   */
+  
+  async getLastFetched(feedId) {
+    try {
+      const feeds = await this.getRSSFeeds();
+      const feed = feeds.find(f => f.id === feedId);
+      return feed?.lastFetched || 0;
+    } catch (error) {
+      console.error(`Error getting lastFetched for feed ${feedId}:`, error);
+      return 0;
+    }
+  }
+
+  async setLastFetched(feedId, timestamp) {
+    try {
+      const feeds = await this.getRSSFeeds();
+      const feedIndex = feeds.findIndex(f => f.id === feedId);
+      
+      if (feedIndex !== -1) {
+        feeds[feedIndex].lastFetched = timestamp;
+        await this.saveRSSFeeds(feeds);
+        return true;
+      } else {
+        console.warn(`Feed ${feedId} not found when setting lastFetched`);
+        return false;
+      }
+    } catch (error) {
+      console.error(`Error setting lastFetched for feed ${feedId}:`, error);
+      return false;
+    }
+  }
+
 }
 
 // Export singleton instance
